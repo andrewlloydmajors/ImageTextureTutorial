@@ -186,7 +186,7 @@ scene.add(directionalLight);
 
 const textureLoader = new THREE.TextureLoader();
 
-textureLoader.load('field360.jpg', (bgTexture) => {
+textureLoader.load('RMSField.jpg', (bgTexture) => {
 
   bgTexture.mapping = THREE.EquirectangularReflectionMapping;
 
@@ -277,7 +277,7 @@ let buildingModel;
 
 objLoader.load(
 
-  'building.obj',
+  'Tower.obj',
 
   (obj) => {
 
