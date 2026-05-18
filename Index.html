@@ -2,54 +2,95 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Image Texture Sandbox</title>
+<title>Student Texture Mapping World</title>
 
 <style>
-  body {
-    margin: 0;
-    overflow: hidden;
-    background: #888;
-  }
 
-  canvas {
-    display: block;
-  }
+body {
+  margin: 0;
+  overflow: hidden;
+  background: #000;
+  font-family: Arial, sans-serif;
+}
 
-  #info {
-    position: absolute;
-    top: 70px;
-    left: 10px;
-    background: white;
-    padding: 10px;
-    border-radius: 10px;
-    font-family: Arial;
-    z-index: 10;
-  }
+canvas {
+  display: block;
+}
 
-  #textureUpload {
-    position: absolute;
-    top: 10px;
-    left: 10px;
-    z-index: 10;
-    background: white;
-    padding: 10px;
-    border-radius: 10px;
-  }
+#uiPanel {
+
+  position: absolute;
+  top: 10px;
+  left: 10px;
+
+  z-index: 10;
+
+  background: rgba(255,255,255,0.92);
+
+  padding: 14px;
+
+  border-radius: 12px;
+
+  display: flex;
+  flex-direction: column;
+
+  gap: 10px;
+
+  max-width: 250px;
+}
+
+#uiPanel label {
+  display: flex;
+  flex-direction: column;
+  font-size: 14px;
+  gap: 4px;
+}
+
+#info {
+  font-size: 13px;
+  color: #333;
+  margin-top: 6px;
+  line-height: 1.4;
+}
+
 </style>
 </head>
 
 <body>
 
-<input
-  type="file"
-  id="textureUpload"
-  accept="image/png, image/jpeg"
-/>
+<div id="uiPanel">
 
-<div id="info">
-  W/S = Drive<br>
-  A/D = Turn<br>
-  Drag Mouse = Rotate Camera
+  <label>
+    Car Texture
+    <input type="file" id="carTextureUpload" accept="image/png, image/jpeg">
+  </label>
+
+  <label>
+    Building Texture
+    <input type="file" id="buildingTextureUpload" accept="image/png, image/jpeg">
+  </label>
+
+  <label>
+    Skybox / 360 Background
+    <input type="file" id="skyboxUpload" accept="image/png, image/jpeg">
+  </label>
+
+  <label>
+    Ground Texture
+    <input type="file" id="groundUpload" accept="image/png, image/jpeg">
+  </label>
+
+  <label>
+    Sunlight Color
+    <input type="color" id="lightColor" value="#ffffff">
+  </label>
+
+  <div id="info">
+    W/S = Drive<br>
+    A/D = Turn<br>
+    Drag Mouse = Rotate Camera
+  </div>
+
 </div>
 
 <script type="importmap">
@@ -66,43 +107,38 @@ import * as THREE from 'three';
 
 import { OrbitControls } from './jsm/controls/OrbitControls.js';
 import { GLTFLoader } from './jsm/loaders/GLTFLoader.js';
+import { OBJLoader } from './jsm/loaders/OBJLoader.js';
 
 
 
-// --------------------------------------------------
+// ----------------------------------------------------
 // SCENE
-// --------------------------------------------------
+// ----------------------------------------------------
 
 const scene = new THREE.Scene();
 
-
-
-// --------------------------------------------------
-// FOG
-// --------------------------------------------------
-
-scene.fog = new THREE.Fog(0xbfd1e5, 50, 400);
+scene.fog = new THREE.Fog(0xbfd1e5, 80, 600);
 
 
 
-// --------------------------------------------------
+// ----------------------------------------------------
 // CAMERA
-// --------------------------------------------------
+// ----------------------------------------------------
 
 const camera = new THREE.PerspectiveCamera(
   75,
   window.innerWidth / window.innerHeight,
   0.1,
-  2000
+  3000
 );
 
-camera.position.set(0, 2, 5);
+camera.position.set(0, 3, 8);
 
 
 
-// --------------------------------------------------
+// ----------------------------------------------------
 // RENDERER
-// --------------------------------------------------
+// ----------------------------------------------------
 
 const renderer = new THREE.WebGLRenderer({
   antialias: true
@@ -116,9 +152,9 @@ document.body.appendChild(renderer.domElement);
 
 
 
-// --------------------------------------------------
+// ----------------------------------------------------
 // CONTROLS
-// --------------------------------------------------
+// ----------------------------------------------------
 
 const controls = new OrbitControls(camera, renderer.domElement);
 
@@ -128,9 +164,9 @@ controls.update();
 
 
 
-// --------------------------------------------------
+// ----------------------------------------------------
 // LIGHTING
-// --------------------------------------------------
+// ----------------------------------------------------
 
 const ambientLight = new THREE.AmbientLight(0xffffff, 2);
 
@@ -144,9 +180,9 @@ scene.add(directionalLight);
 
 
 
-// --------------------------------------------------
-// 360 BACKGROUND
-// --------------------------------------------------
+// ----------------------------------------------------
+// DEFAULT SKYBOX
+// ----------------------------------------------------
 
 const textureLoader = new THREE.TextureLoader();
 
@@ -156,65 +192,66 @@ textureLoader.load('field360.jpg', (bgTexture) => {
 
   scene.background = bgTexture;
 
-  // Makes reflections/environment lighting work too
   scene.environment = bgTexture;
 
 });
 
 
 
-// --------------------------------------------------
-// GRASS GROUND
-// --------------------------------------------------
+// ----------------------------------------------------
+// GROUND
+// ----------------------------------------------------
 
 const grassTexture = textureLoader.load('grass.jpg');
 
 grassTexture.wrapS = THREE.RepeatWrapping;
 grassTexture.wrapT = THREE.RepeatWrapping;
 
-grassTexture.repeat.set(200, 200);
+grassTexture.repeat.set(300, 300);
 
 grassTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
 
+const groundMaterial = new THREE.MeshStandardMaterial({
+  map: grassTexture
+});
+
 const ground = new THREE.Mesh(
 
-  new THREE.PlaneGeometry(5000, 5000),
+  new THREE.PlaneGeometry(6000, 6000),
 
-  new THREE.MeshStandardMaterial({
-    map: grassTexture
-  })
+  groundMaterial
 
 );
 
 ground.rotation.x = -Math.PI / 2;
 
-ground.position.y = 0;
-
 scene.add(ground);
 
 
 
-// --------------------------------------------------
+// ----------------------------------------------------
 // LOAD CAR MODEL
-// --------------------------------------------------
+// ----------------------------------------------------
 
-const loader = new GLTFLoader();
+const gltfLoader = new GLTFLoader();
 
 let carModel;
 
-loader.load(
+gltfLoader.load(
 
   'car.glb',
 
   (gltf) => {
 
-    console.log("MODEL LOADED");
-
     carModel = gltf.scene;
 
-    carModel.scale.set(1, 1, 1);
+    carModel.scale.set(1,1,1);
+
+    carModel.position.set(0,0,0);
 
     scene.add(carModel);
+
+    console.log("Car Loaded");
 
   },
 
@@ -230,13 +267,51 @@ loader.load(
 
 
 
-// --------------------------------------------------
-// TEXTURE UPLOAD
-// --------------------------------------------------
+// ----------------------------------------------------
+// LOAD BUILDING MODEL
+// ----------------------------------------------------
 
-const uploadInput = document.getElementById('textureUpload');
+const objLoader = new OBJLoader();
 
-uploadInput.addEventListener('change', (event) => {
+let buildingModel;
+
+objLoader.load(
+
+  'building.obj',
+
+  (obj) => {
+
+    buildingModel = obj;
+
+    buildingModel.position.set(15,0,-15);
+
+    buildingModel.scale.set(1,1,1);
+
+    scene.add(buildingModel);
+
+    console.log("Building Loaded");
+
+  },
+
+  undefined,
+
+  (error) => {
+
+    console.error(error);
+
+  }
+
+);
+
+
+
+// ----------------------------------------------------
+// CAR TEXTURE UPLOAD
+// ----------------------------------------------------
+
+const carTextureUpload = document.getElementById('carTextureUpload');
+
+carTextureUpload.addEventListener('change', (event) => {
 
   const file = event.target.files[0];
 
@@ -266,9 +341,120 @@ uploadInput.addEventListener('change', (event) => {
 
 
 
-// --------------------------------------------------
-// RESIZE
-// --------------------------------------------------
+// ----------------------------------------------------
+// BUILDING TEXTURE UPLOAD
+// ----------------------------------------------------
+
+const buildingTextureUpload = document.getElementById('buildingTextureUpload');
+
+buildingTextureUpload.addEventListener('change', (event) => {
+
+  const file = event.target.files[0];
+
+  if (!file || !buildingModel) return;
+
+  const imageURL = URL.createObjectURL(file);
+
+  textureLoader.load(imageURL, (texture) => {
+
+    texture.flipY = false;
+
+    buildingModel.traverse((child) => {
+
+      if (child.isMesh) {
+
+        child.material.map = texture;
+
+        child.material.needsUpdate = true;
+
+      }
+
+    });
+
+  });
+
+});
+
+
+
+// ----------------------------------------------------
+// SKYBOX UPLOAD
+// ----------------------------------------------------
+
+const skyboxUpload = document.getElementById('skyboxUpload');
+
+skyboxUpload.addEventListener('change', (event) => {
+
+  const file = event.target.files[0];
+
+  if (!file) return;
+
+  const imageURL = URL.createObjectURL(file);
+
+  textureLoader.load(imageURL, (texture) => {
+
+    texture.mapping = THREE.EquirectangularReflectionMapping;
+
+    scene.background = texture;
+
+    scene.environment = texture;
+
+  });
+
+});
+
+
+
+// ----------------------------------------------------
+// GROUND TEXTURE UPLOAD
+// ----------------------------------------------------
+
+const groundUpload = document.getElementById('groundUpload');
+
+groundUpload.addEventListener('change', (event) => {
+
+  const file = event.target.files[0];
+
+  if (!file) return;
+
+  const imageURL = URL.createObjectURL(file);
+
+  textureLoader.load(imageURL, (texture) => {
+
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+
+    texture.repeat.set(300, 300);
+
+    texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+
+    groundMaterial.map = texture;
+
+    groundMaterial.needsUpdate = true;
+
+  });
+
+});
+
+
+
+// ----------------------------------------------------
+// LIGHT COLOR PICKER
+// ----------------------------------------------------
+
+const lightColorInput = document.getElementById('lightColor');
+
+lightColorInput.addEventListener('input', (event) => {
+
+  directionalLight.color.set(event.target.value);
+
+});
+
+
+
+// ----------------------------------------------------
+// WINDOW RESIZE
+// ----------------------------------------------------
 
 window.addEventListener('resize', () => {
 
@@ -282,9 +468,9 @@ window.addEventListener('resize', () => {
 
 
 
-// --------------------------------------------------
+// ----------------------------------------------------
 // KEYBOARD INPUT
-// --------------------------------------------------
+// ----------------------------------------------------
 
 const keys = {};
 
@@ -302,9 +488,9 @@ window.addEventListener('keyup', (event) => {
 
 
 
-// --------------------------------------------------
+// ----------------------------------------------------
 // CAR MOVEMENT
-// --------------------------------------------------
+// ----------------------------------------------------
 
 let speed = 0;
 
@@ -320,11 +506,13 @@ function animate() {
 
       speed = 0.08;
 
-    } else if (keys['s']) {
+    }
+    else if (keys['s']) {
 
       speed = -0.05;
 
-    } else {
+    }
+    else {
 
       speed = 0;
 
@@ -344,7 +532,7 @@ function animate() {
 
     }
 
-    // MOVE CAR
+    // MOVE
 
     carModel.translateZ(-speed);
 
