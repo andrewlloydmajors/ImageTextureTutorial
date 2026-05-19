@@ -374,29 +374,31 @@ function resolveWallRaycasts() {
     if (pushDir.lengthSq() < 0.0001) continue;
     pushDir.normalize();
 
-    // Redirect velocity: decompose into into-wall and along-wall components.
-    // Energy loss scales with impact angle — glancing hits lose almost nothing,
-    // direct hits lose most momentum. Speed never reverses — we just slow and redirect.
     const facingDir  = new THREE.Vector3(0, 0, -1).applyQuaternion(carModel.quaternion);
     const velWorld   = facingDir.clone().multiplyScalar(speed).add(lateralVel);
     const intoWall   = velWorld.dot(pushDir.clone().negate());
+
     if (intoWall > 0) {
       const totalSpeed  = velWorld.length();
       const impactRatio = totalSpeed > 0.001 ? intoWall / totalSpeed : 0;
-      // Glancing (impactRatio ~0): lose ~5% of total speed
-      // Direct  (impactRatio ~1): lose ~80% of total speed
-      const speedRetention = 1.0 - impactRatio * 0.75;
-      // Strip the into-wall component, scale remaining velocity down by retention
-      velWorld.addScaledVector(pushDir, intoWall); // remove into-wall component entirely
-      if (velWorld.length() > 0.0001) velWorld.normalize();
-      const newSpeed = totalSpeed * speedRetention;
-      // Put everything into lateralVel as a world-space velocity;
-      // the next frame's facing projection will naturally re-align speed and lateral
-      speed      = newSpeed * velWorld.dot(facingDir);
-      lateralVel.copy(velWorld.clone().multiplyScalar(newSpeed))
-                 .addScaledVector(facingDir, -speed);
-      // Clamp speed to non-negative — no reversals from wall hits
-      speed = Math.max(0, speed);
+
+      if (impactRatio < 0.5) {
+        // ── Glancing hit (more parallel than perpendicular) ──
+        // Keep forward speed, rotate car away from wall, small speed loss.
+        speed *= (1.0 - impactRatio * 0.3);
+        lateralVel.set(0, 0, 0);
+        // Rotate car to face away from the wall — reflect facing around pushDir
+        const reflectAngle = Math.asin(Math.min(impactRatio * 1.2, 1.0)) * 0.6;
+        // Determine which side of the car the wall is on to rotate the right way
+        const wallSide = facingDir.clone().cross(pushDir).y;
+        carModel.rotation.y += reflectAngle * Math.sign(wallSide);
+      } else {
+        // ── Direct hit (more perpendicular than parallel) ──
+        // Bounce backward, larger speed loss scaled with how head-on it is.
+        const retention = 1.0 - (impactRatio - 0.5) * 1.4; // 0.5->30% loss, 1.0->70% loss
+        speed = -speed * Math.max(0, retention);
+        lateralVel.set(0, 0, 0);
+      }
     }
 
     const pushDist = localOffset.length() + 0.3;
