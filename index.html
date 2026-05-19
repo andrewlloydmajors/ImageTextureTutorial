@@ -375,23 +375,28 @@ function resolveWallRaycasts() {
     pushDir.normalize();
 
     // Redirect velocity: decompose into into-wall and along-wall components.
-    // Energy loss scales with the impact angle — glancing hits lose almost nothing,
-    // direct hits lose most of the into-wall momentum.
-    const facingDir = new THREE.Vector3(0, 0, -1).applyQuaternion(carModel.quaternion);
-    const velWorld  = facingDir.multiplyScalar(speed).add(lateralVel);
-    const intoWall  = velWorld.dot(pushDir.clone().negate());
+    // Energy loss scales with impact angle — glancing hits lose almost nothing,
+    // direct hits lose most momentum. Speed never reverses — we just slow and redirect.
+    const facingDir  = new THREE.Vector3(0, 0, -1).applyQuaternion(carModel.quaternion);
+    const velWorld   = facingDir.clone().multiplyScalar(speed).add(lateralVel);
+    const intoWall   = velWorld.dot(pushDir.clone().negate());
     if (intoWall > 0) {
-      // How direct is the impact? 0 = pure glance, 1 = dead-on
       const totalSpeed  = velWorld.length();
       const impactRatio = totalSpeed > 0.001 ? intoWall / totalSpeed : 0;
-      // Glancing (impactRatio ~0): keep ~95% of into-wall energy
-      // Direct (impactRatio ~1): keep ~5% of into-wall energy
-      const retention = 0.95 - impactRatio * 0.90;
-      velWorld.addScaledVector(pushDir, intoWall * (1 - retention));
-      // Back-solve speed and lateral from new velocity
-      const newFacing = new THREE.Vector3(0, 0, -1).applyQuaternion(carModel.quaternion);
-      speed = velWorld.dot(newFacing);
-      lateralVel.copy(velWorld).addScaledVector(newFacing, -speed);
+      // Glancing (impactRatio ~0): lose ~5% of total speed
+      // Direct  (impactRatio ~1): lose ~80% of total speed
+      const speedRetention = 1.0 - impactRatio * 0.75;
+      // Strip the into-wall component, scale remaining velocity down by retention
+      velWorld.addScaledVector(pushDir, intoWall); // remove into-wall component entirely
+      if (velWorld.length() > 0.0001) velWorld.normalize();
+      const newSpeed = totalSpeed * speedRetention;
+      // Put everything into lateralVel as a world-space velocity;
+      // the next frame's facing projection will naturally re-align speed and lateral
+      speed      = newSpeed * velWorld.dot(facingDir);
+      lateralVel.copy(velWorld.clone().multiplyScalar(newSpeed))
+                 .addScaledVector(facingDir, -speed);
+      // Clamp speed to non-negative — no reversals from wall hits
+      speed = Math.max(0, speed);
     }
 
     const pushDist = localOffset.length() + 0.3;
@@ -552,8 +557,8 @@ function updateLapTimer() {
 // Instead of rotating instantly, we lerp toward a target turn rate each frame.
 // This makes steering feel gradual — it builds as you hold a key and fades when released.
 let steerRate = 0;  // current turn rate, lerped toward target each frame
-const STEER_BUILDUP  = 0.08;  // how fast steerRate reaches max (lower = more gradual)
-const STEER_FALLOFF  = 0.12;  // how fast steerRate returns to 0 on release
+const STEER_BUILDUP  = 0.14;  // how fast steerRate reaches max (lower = more gradual)
+const STEER_FALLOFF  = 0.18;  // how fast steerRate returns to 0 on release
 
 
 function animate() {
