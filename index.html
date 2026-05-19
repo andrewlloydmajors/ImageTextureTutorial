@@ -328,7 +328,7 @@ function animate() {
       if (keys['a']) steerTarget =  maxWheelSteer;
       if (keys['d']) steerTarget = -maxWheelSteer;
 
-      wheelSteer += (steerTarget - wheelSteer) * 0.15;
+      wheelSteer += (steerTarget - wheelSteer) * 0.08;
       frontWheelPivot.rotation.y = wheelSteer;
 
       // Spin on the inner spinner, completely separate from steer pivot
