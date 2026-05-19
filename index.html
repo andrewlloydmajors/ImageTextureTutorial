@@ -271,8 +271,8 @@ function updateObstacleBoxes() {
 const BOUNCE = 0.4; // fraction of speed reflected back (0=stop dead, 1=full bounce)
 // How much to shrink the car's collision box on each side (in world units).
 // Car is 2.684 wide, 5.668 long. Inset trims it down to roughly the body.
-const CAR_INSET_X = 0.6;  // trims ~1.2 total off width
-const CAR_INSET_Z = 0.9;  // trims ~1.8 total off length
+const CAR_INSET_X = 0.7;  // effective half-width  ~0.64 (matches visual body)
+const CAR_INSET_Z = 1.0;  // effective half-length ~1.83 (matches visual body)
 
 function resolveCollisions() {
   if (!carModel) return;
