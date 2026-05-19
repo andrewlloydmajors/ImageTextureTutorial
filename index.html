@@ -145,7 +145,8 @@ let carModel = null;
 let frontWheelPivot = null; // tire1_4 - handles steering (rotation.y only)
 let frontWheelSpinner = null; // inner group - handles spin (quaternion)
 let frontWheelMesh  = null;
-let backWheelPivot  = null; // tire2_2 - handles spin (quaternion)
+let backWheelPivot  = null; // tire2_2 - outer pivot for position
+let backWheelSpinner = null; // inner group - handles spin (quaternion)
 
 let wheelSteer = 0;
 const maxWheelSteer  = 0.5;
@@ -227,8 +228,11 @@ gltfLoader.load('Car.glb', (gltf) => {
   }
 
   if (tireBack) {
-    backWheelMesh  = tireBack;
     backWheelPivot = makeWheelPivot(tireBack);
+    backWheelSpinner = new THREE.Group();
+    backWheelPivot.add(backWheelSpinner);
+    backWheelPivot.remove(tireBack);
+    backWheelSpinner.add(tireBack);
   } else {
     console.warn('Back wheel node "tire2_2" not found in GLB.');
   }
@@ -333,9 +337,9 @@ function animate() {
     }
 
     // ── Back wheel: spin only ───────────────────────────
-    if (backWheelPivot) {
+    if (backWheelSpinner) {
       _spinQ.setFromAxisAngle(_spinAxis, -speed * wheelSpinFactor);
-      backWheelPivot.quaternion.premultiply(_spinQ);
+      backWheelSpinner.quaternion.premultiply(_spinQ);
     }
 
     // ── Camera follow ───────────────────────────────────
