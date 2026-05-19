@@ -203,6 +203,11 @@ gltfLoader.load('Car.glb', (gltf) => {
 
   scene.add(carModel);
 
+  // Force Three.js to compute all world matrices now, before we call
+  // worldToLocal / Box3.setFromObject. Without this, matrices are stale
+  // (they're only updated lazily on render) and the pivot positions are wrong.
+  carModel.updateMatrixWorld(true);
+
   // ── Set up wheel pivots AFTER adding to scene ──────────
   // We use getObjectByName which is safe and doesn't mid-traverse restructure.
   const tireFront = carModel.getObjectByName('tire1_4');
