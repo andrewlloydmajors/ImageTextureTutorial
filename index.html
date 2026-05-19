@@ -215,26 +215,14 @@ gltfLoader.load('Car.glb', (gltf) => {
 
   if (tireFront) {
     frontWheelMesh  = tireFront;
-    const fbox = new THREE.Box3().setFromObject(tireFront);
-    const fc = new THREE.Vector3(); fbox.getCenter(fc);
-    console.log('tireFront world center:', fc);
-    console.log('tireFront local position before pivot:', tireFront.position);
     frontWheelPivot = makeWheelPivot(tireFront);
-    console.log('frontWheelPivot position:', frontWheelPivot.position);
-    console.log('tireFront position after pivot:', tireFront.position);
   } else {
     console.warn('Front wheel node "tire1_4" not found in GLB.');
   }
 
   if (tireBack) {
     backWheelMesh  = tireBack;
-    const bbox = new THREE.Box3().setFromObject(tireBack);
-    const bc = new THREE.Vector3(); bbox.getCenter(bc);
-    console.log('tireBack world center:', bc);
-    console.log('tireBack local position before pivot:', tireBack.position);
     backWheelPivot = makeWheelPivot(tireBack);
-    console.log('backWheelPivot position:', backWheelPivot.position);
-    console.log('tireBack position after pivot:', tireBack.position);
   } else {
     console.warn('Back wheel node "tire2_2" not found in GLB.');
   }
@@ -294,6 +282,11 @@ const turnSpeed    = 0.04;
 const baseOffset = new THREE.Vector3(0, 3, 8);
 const lookOffset = new THREE.Vector3(0, 1, 0);
 
+// Quaternion for spinning wheels: we rotate the pivot around world X each frame.
+// Using quaternion multiply avoids gimbal issues from the baked 90-deg mesh rotation.
+const _spinAxis = new THREE.Vector3(1, 0, 0);
+const _spinQ = new THREE.Quaternion();
+
 // ─── ANIMATE ─────────────────────────────────────────────
 function animate() {
   requestAnimationFrame(animate);
@@ -328,14 +321,17 @@ function animate() {
       wheelSteer += (steerTarget - wheelSteer) * 0.15;
       frontWheelPivot.rotation.y = wheelSteer;
 
-      if (frontWheelMesh) {
-        frontWheelMesh.rotation.x += speed * wheelSpinFactor;
-      }
+      // Spin pivot around world X via quaternion to avoid gimbal with baked rotation
+      _spinQ.setFromAxisAngle(_spinAxis, speed * wheelSpinFactor);
+      frontWheelPivot.quaternion.premultiply(_spinQ);
+      // Re-apply steer on top
+      frontWheelPivot.rotation.y = wheelSteer;
     }
 
     // ── Back wheel: spin only ───────────────────────────
-    if (backWheelMesh) {
-      backWheelMesh.rotation.x += speed * wheelSpinFactor;
+    if (backWheelPivot) {
+      _spinQ.setFromAxisAngle(_spinAxis, speed * wheelSpinFactor);
+      backWheelPivot.quaternion.premultiply(_spinQ);
     }
 
     // ── Camera follow ───────────────────────────────────
