@@ -168,17 +168,16 @@ scene.add(ground);
 
 
 // ----------------------------------------------------
-// CAR + WHEELS
+// CAR SYSTEM
 // ----------------------------------------------------
 let carModel;
 
 let frontWheelPivot = null;
-let frontWheelMesh = null;
-
-let rearWheelMesh = null;
-
 let wheelSpin = 0;
 let wheelSteer = 0;
+
+const rearWheels = [];
+const frontWheels = [];
 
 const maxWheelSteer = 0.6;
 const wheelSpinFactor = 0.12;
@@ -194,16 +193,13 @@ gltfLoader.load('Car.glb', (gltf) => {
   carModel.scale.set(1, 1, 1);
   carModel.position.set(0, 0, 0);
 
-  // ground align
   const box = new THREE.Box3().setFromObject(carModel);
   carModel.position.y -= box.min.y;
 
   carModel.traverse((child) => {
 
-    // FRONT WHEEL
+    // FRONT WHEELS (pivoted steering)
     if (child.name === "tire1_4") {
-
-      frontWheelMesh = child;
 
       const pivot = new THREE.Group();
       child.parent.add(pivot);
@@ -216,9 +212,9 @@ gltfLoader.load('Car.glb', (gltf) => {
       frontWheelPivot = pivot;
     }
 
-    // REAR WHEEL
-    if (child.name === "tire2_2") {
-      rearWheelMesh = child;
+    // REAR WHEELS (spin only)
+    if (child.name === "tire2_2" || child.name.toLowerCase().includes("tire2")) {
+      rearWheels.push(child);
     }
 
   });
@@ -240,21 +236,6 @@ gltfLoader.load('Tower.glb', (gltf) => {
 
 
 // ----------------------------------------------------
-// TEXTURE HELPERS
-// ----------------------------------------------------
-function applyTexture(model, texture) {
-  texture.flipY = false;
-
-  model.traverse((child) => {
-    if (child.isMesh) {
-      child.material.map = texture;
-      child.material.needsUpdate = true;
-    }
-  });
-}
-
-
-// ----------------------------------------------------
 // INPUT
 // ----------------------------------------------------
 const keys = {};
@@ -270,8 +251,6 @@ let yaw = 0;
 let pitch = 0;
 
 const sensitivity = 0.004;
-const minPitch = -0.8;
-const maxPitch = 0.35;
 
 window.addEventListener('mousedown', () => mouseDown = true);
 window.addEventListener('mouseup', () => mouseDown = false);
@@ -282,12 +261,12 @@ window.addEventListener('mousemove', (e) => {
   yaw -= e.movementX * sensitivity;
   pitch -= e.movementY * sensitivity;
 
-  pitch = Math.max(minPitch, Math.min(maxPitch, pitch));
+  pitch = Math.max(-0.8, Math.min(0.35, pitch));
 });
 
 
 // ----------------------------------------------------
-// DRIVING PHYSICS
+// PHYSICS
 // ----------------------------------------------------
 let speed = 0;
 const maxSpeed = 0.25;
@@ -331,7 +310,7 @@ function animate() {
 
 
     // -----------------------------
-    // FRONT WHEEL STEERING
+    // WHEEL STEERING
     // -----------------------------
     if (frontWheelPivot) {
 
@@ -345,16 +324,19 @@ function animate() {
 
 
     // -----------------------------
-    // WHEEL SPIN (FRONT + REAR synced)
+    // WHEEL SPIN (FIXED SIGN + ALL REAR WHEELS)
     // -----------------------------
-    wheelSpin -= speed;
+    wheelSpin -= speed; // FIX: correct direction once
 
-    if (frontWheelMesh) {
-      frontWheelMesh.rotation.x = -wheelSpin * wheelSpinFactor;
+    const spin = wheelSpin * wheelSpinFactor;
+
+    if (frontWheelPivot) {
+      const wheel = frontWheelPivot.children[0];
+      if (wheel) wheel.rotation.x = spin;
     }
 
-    if (rearWheelMesh) {
-      rearWheelMesh.rotation.x = -wheelSpin * wheelSpinFactor;
+    for (const w of rearWheels) {
+      w.rotation.x = spin;
     }
 
 
@@ -396,13 +378,27 @@ window.addEventListener('resize', () => {
 document.getElementById('carTextureUpload').addEventListener('change', (e) => {
   if (!carModel) return;
   const url = URL.createObjectURL(e.target.files[0]);
-  textureLoader.load(url, (tex) => applyTexture(carModel, tex));
+  textureLoader.load(url, (tex) => {
+    carModel.traverse(c => {
+      if (c.isMesh) {
+        c.material.map = tex;
+        c.material.needsUpdate = true;
+      }
+    });
+  });
 });
 
 document.getElementById('buildingTextureUpload').addEventListener('change', (e) => {
   if (!buildingModel) return;
   const url = URL.createObjectURL(e.target.files[0]);
-  textureLoader.load(url, (tex) => applyTexture(buildingModel, tex));
+  textureLoader.load(url, (tex) => {
+    buildingModel.traverse(c => {
+      if (c.isMesh) {
+        c.material.map = tex;
+        c.material.needsUpdate = true;
+      }
+    });
+  });
 });
 
 document.getElementById('skyboxUpload').addEventListener('change', (e) => {
