@@ -307,57 +307,70 @@ function resolveAabb() {
 const wallMeshes = [];
 const _raycaster = new THREE.Raycaster();
 
-// Ray directions in car-local space (XZ plane). We cast in 8 directions.
-const RAY_DIRS_LOCAL = [
-  new THREE.Vector3( 0,  0, -1),  // forward
-  new THREE.Vector3( 0,  0,  1),  // back
-  new THREE.Vector3(-1,  0,  0),  // left
-  new THREE.Vector3( 1,  0,  0),  // right
-  new THREE.Vector3(-0.707, 0, -0.707), // front-left
-  new THREE.Vector3( 0.707, 0, -0.707), // front-right
-  new THREE.Vector3(-0.707, 0,  0.707), // back-left
-  new THREE.Vector3( 0.707, 0,  0.707), // back-right
+// The wall mesh has a 90-deg X rotation baked in from Blender, so its faces
+// point upward — horizontal rays miss them entirely. Instead we cast downward
+// rays from above, offset to the car's corners and edges. If a ray hits the
+// wall top surface it means that point of the car footprint is over a wall,
+// and we push the car away from the hit point.
+
+const RAY_ORIGIN_Y = 2.0;    // above the wall top (~1.5 world units)
+const RAY_DOWN     = new THREE.Vector3(0, -1, 0);
+const RAY_FAR      = RAY_ORIGIN_Y + 0.5;  // only catch things near ground
+
+// Sample offsets in car-local XZ space — corners + edge midpoints
+const CAR_HALF_W = 1.0;
+const CAR_HALF_L = 1.8;
+const SAMPLE_OFFSETS_LOCAL = [
+  new THREE.Vector3( 0,           0,  0           ),  // centre
+  new THREE.Vector3( CAR_HALF_W,  0,  0           ),  // right
+  new THREE.Vector3(-CAR_HALF_W,  0,  0           ),  // left
+  new THREE.Vector3( 0,           0, -CAR_HALF_L  ),  // front
+  new THREE.Vector3( 0,           0,  CAR_HALF_L  ),  // back
+  new THREE.Vector3( CAR_HALF_W,  0, -CAR_HALF_L  ),  // front-right
+  new THREE.Vector3(-CAR_HALF_W,  0, -CAR_HALF_L  ),  // front-left
+  new THREE.Vector3( CAR_HALF_W,  0,  CAR_HALF_L  ),  // back-right
+  new THREE.Vector3(-CAR_HALF_W,  0,  CAR_HALF_L  ),  // back-left
 ];
-
-// How far (world units) a ray must reach a wall before we react.
-// Set to roughly half the car's diagonal plus a small buffer.
-const WALL_RAY_DIST = 2.0;
-
-// Origin offset: cast from slightly above ground so rays don't clip the floor.
-const RAY_ORIGIN_Y = 0.5;
 
 let _rayDebugFrame = 0;
 function resolveWallRaycasts() {
   if (!carModel || wallMeshes.length === 0) return;
 
   _rayDebugFrame++;
-  const doLog = _rayDebugFrame % 60 === 0; // log once per second
+  const doLog = _rayDebugFrame % 60 === 0;
 
-  const carPos  = carModel.position.clone();
+  const carPos  = carModel.position;
   const carQuat = carModel.quaternion;
-  const origin  = carPos.clone();
-  origin.y      = RAY_ORIGIN_Y;
 
-  if (doLog) console.log('Car pos:', carPos, 'Wall meshes:', wallMeshes.length);
+  for (const localOffset of SAMPLE_OFFSETS_LOCAL) {
+    const worldOffset = localOffset.clone().applyQuaternion(carQuat);
+    const origin = new THREE.Vector3(
+      carPos.x + worldOffset.x,
+      RAY_ORIGIN_Y,
+      carPos.z + worldOffset.z
+    );
 
-  for (const localDir of RAY_DIRS_LOCAL) {
-    const worldDir = localDir.clone().applyQuaternion(carQuat).normalize();
-    _raycaster.set(origin, worldDir);
-    _raycaster.far = WALL_RAY_DIST;
+    _raycaster.set(origin, RAY_DOWN);
+    _raycaster.far = RAY_FAR;
 
     const hits = _raycaster.intersectObjects(wallMeshes, false);
-    if (doLog && hits.length > 0) console.log('  Ray hit:', hits[0].distance, hits[0].object.name);
+    if (doLog && hits.length > 0) {
+      console.log('Wall hit at offset', localOffset, 'dist:', hits[0].distance, 'pt:', hits[0].point);
+    }
     if (hits.length === 0) continue;
 
-    const hit         = hits[0];
-    const penetration = WALL_RAY_DIST - hit.distance;
-    const normal      = hit.face.normal.clone()
-      .transformDirection(hit.object.matrixWorld);
-    normal.y = 0;
-    if (normal.lengthSq() < 0.001) continue;
-    normal.normalize();
+    // This sample point is over the wall — push car away from hit point horizontally
+    const hitPt = hits[0].point;
+    const pushDir = new THREE.Vector3(
+      carPos.x - hitPt.x,
+      0,
+      carPos.z - hitPt.z
+    );
+    if (pushDir.lengthSq() < 0.0001) continue;
+    pushDir.normalize();
 
-    carModel.position.addScaledVector(normal, penetration);
+    const pushDist = localOffset.length() + 0.3;
+    carModel.position.addScaledVector(pushDir, pushDist);
     speed = -speed * BOUNCE;
     break;
   }
@@ -399,15 +412,8 @@ gltfLoader.load('Track.glb', (gltf) => {
   const wallNode = trackModel.getObjectByName('Wall');
   if (wallNode) {
     wallNode.traverse((child) => {
-      if (child.isMesh) {
-        wallMeshes.push(child);
-        console.log('Wall mesh found:', child.name, 'geometry vertices:', child.geometry.attributes.position.count);
-        console.log('  matrixWorld:', child.matrixWorld.elements);
-        const wb = new THREE.Box3().setFromObject(child);
-        console.log('  world box:', wb.min, wb.max);
-      }
+      if (child.isMesh) wallMeshes.push(child);
     });
-    console.log('Total wall meshes:', wallMeshes.length);
   } else {
     console.warn('Wall node not found in Track.glb');
   }
