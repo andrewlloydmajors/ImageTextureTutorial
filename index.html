@@ -61,8 +61,8 @@ canvas {
 <div id="uiPanel">
 
   <label>
-    Car Texture
-    <input type="file" id="carTextureUpload" accept="image/png, image/jpeg">
+     Texture
+    <input type="file" id="TextureUpload" accept="image/png, image/jpeg">
   </label>
 
   <label>
@@ -230,20 +230,20 @@ scene.add(ground);
 
 
 // ----------------------------------------------------
-// LOAD CAR MODEL
+// LOAD CAR MODEL (OBJ VERSION)
 // ----------------------------------------------------
 
-const gltfLoader = new GLTFLoader();
+const objLoader = new OBJLoader();
 
 let carModel;
 
-gltfLoader.load(
+objLoader.load(
 
   'Car.obj',
 
-  (gltf) => {
+  (obj) => {
 
-    carModel = gltf.scene;
+    carModel = obj;
 
     carModel.scale.set(1,1,1);
 
