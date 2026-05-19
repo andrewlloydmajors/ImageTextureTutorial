@@ -381,6 +381,7 @@ function resolveWallRaycasts() {
     if (intoWall > 0) {
       const totalSpeed  = velWorld.length();
       const impactRatio = totalSpeed > 0.001 ? intoWall / totalSpeed : 0;
+      console.log('impactRatio:', impactRatio.toFixed(3), 'intoWall:', intoWall.toFixed(3), 'totalSpeed:', totalSpeed.toFixed(3));
 
       if (impactRatio < 0.5) {
         // ── Glancing hit (more parallel than perpendicular) ──
