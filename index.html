@@ -282,26 +282,12 @@ window.addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
 
 
 
-// ----------------------------------------------------
-// MOVEMENT
-// ----------------------------------------------------
-
 let speed = 0;
-
-
-
-// ----------------------------------------------------
-// CAMERA FOLLOW SETTINGS
-// ----------------------------------------------------
-
-const cameraOffset = new THREE.Vector3(0, 3, 8);
-const lookOffset = new THREE.Vector3(0, 1, 0);
-
-
-
-// ----------------------------------------------------
-// ANIMATE
-// ----------------------------------------------------
+let maxSpeed = 0.25;
+let acceleration = 0.006;
+let deceleration = 0.004;
+let friction = 0.003;
+let turnSpeed = 0.04;
 
 function animate() {
 
@@ -309,21 +295,53 @@ function animate() {
 
   if (carModel) {
 
-    // movement
-    if (keys['w']) speed = 0.08;
-    else if (keys['s']) speed = -0.05;
-    else speed = 0;
+    // -----------------------------
+    // ACCELERATION / BRAKING
+    // -----------------------------
+    if (keys['w']) {
+      speed += acceleration;
+    } 
+    else if (keys['s']) {
+      speed -= acceleration;
+    } 
+    else {
+      // natural friction when no input
+      if (speed > 0) speed -= friction;
+      if (speed < 0) speed += friction;
+    }
 
-    if (keys['a']) carModel.rotation.y += 0.03;
-    if (keys['d']) carModel.rotation.y -= 0.03;
+    // clamp speed
+    speed = Math.max(-maxSpeed, Math.min(maxSpeed, speed));
 
+
+
+    // -----------------------------
+    // STEERING (more realistic at speed)
+    // -----------------------------
+    const speedFactor = Math.min(Math.abs(speed) / maxSpeed, 1);
+
+    if (keys['a']) {
+      carModel.rotation.y += turnSpeed * speedFactor;
+    }
+
+    if (keys['d']) {
+      carModel.rotation.y -= turnSpeed * speedFactor;
+    }
+
+
+
+    // -----------------------------
+    // MOVE CAR
+    // -----------------------------
     carModel.translateZ(-speed);
 
 
 
     // -----------------------------
-    // CAMERA FOLLOW (3rd PERSON)
+    // CAMERA FOLLOW (keep yours)
     // -----------------------------
+    const cameraOffset = new THREE.Vector3(0, 3, 8);
+    const lookOffset = new THREE.Vector3(0, 1, 0);
 
     const offset = cameraOffset.clone();
     offset.applyQuaternion(carModel.quaternion);
@@ -334,14 +352,13 @@ function animate() {
 
     const lookTarget = carModel.position.clone().add(lookOffset);
     camera.lookAt(lookTarget);
+
   }
 
   renderer.render(scene, camera);
-
 }
 
 animate();
-
 
 
 // ----------------------------------------------------
