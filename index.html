@@ -485,7 +485,7 @@ let speed        = 0;
 const maxSpeed      = 0.42;
 const acceleration  = 0.004;
 const friction      = 0.004;
-const turnSpeed     = 0.04;
+const turnSpeed     = 0.032;  // reduced from 0.04
 
 // ─── DRIFT STATE ─────────────────────────────────────────
 // Simcade drift: the car has a "facing" direction and a separate "velocity"
@@ -499,8 +499,11 @@ const turnSpeed     = 0.04;
 let lateralVel   = new THREE.Vector3(0, 0, 0);
 const DRIFT_GRIP        = 0.18;  // how fast lateral vel bleeds away normally
 const DRIFT_GRIP_SLIDE  = 0.04;  // grip while actively drifting (low = slidey)
-const DRIFT_BUILDUP     = 0.06;  // how fast oversteer builds when initiating
-const DRIFT_TURN_BOOST  = 1.8;   // turn speed multiplier while drifting
+const DRIFT_BUILDUP     = 0.035; // reduced from 0.06 — less aggressive slide angle
+const DRIFT_TURN_BOOST  = 1.5;   // reduced from 1.8
+// How much lateral bleed to add per frame when cornering without drifting.
+// Creates a natural loose feeling — rear steps out slightly on fast corners.
+const NATURAL_BLEED     = 0.012;
 const DRIFT_FRICTION    = 0.0015; // small speed cost while drifting
 
 // ─── CAMERA OFFSETS ──────────────────────────────────────
@@ -595,6 +598,14 @@ function animate() {
       // Small speed cost while drifting
       speed *= (1 - DRIFT_FRICTION);
     } else {
+      // Natural cornering bleed: add a small lateral nudge when turning at speed,
+      // proportional to how hard the car is turning and how fast it's going.
+      // This makes the car feel loose and alive rather than pivoting on a point.
+      const steerInput = (keys['a'] ? 1 : 0) - (keys['d'] ? 1 : 0);
+      if (steerInput !== 0 && Math.abs(speed) > maxSpeed * 0.2) {
+        const rightDir = new THREE.Vector3(1, 0, 0).applyQuaternion(carModel.quaternion);
+        lateralVel.addScaledVector(rightDir, steerInput * NATURAL_BLEED * speedFactor);
+      }
       // Tyres grip back up — bleed lateral velocity quickly
       lateralVel.multiplyScalar(1 - DRIFT_GRIP);
     }
