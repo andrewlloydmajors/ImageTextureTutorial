@@ -288,6 +288,8 @@ function makeWheelPivot(wheel) {
 // LOAD CAR
 // ────────────────────────────────────────────────────────
 
+let pendingSpawnPosition = null;
+
 gltfLoader.load('Car.glb', (gltf) => {
 
   carModel = gltf.scene;
@@ -312,6 +314,13 @@ gltfLoader.load('Car.glb', (gltf) => {
 
   scene.add(carModel);
 
+  // APPLY TRACK SPAWN IF IT EXISTS
+  if (pendingSpawnPosition) {
+
+    carModel.position.copy(pendingSpawnPosition);
+
+  }
+
   carModel.updateMatrixWorld(true);
 
   const tireFront = carModel.getObjectByName('tire1_4');
@@ -330,6 +339,7 @@ gltfLoader.load('Car.glb', (gltf) => {
     frontWheelPivot.remove(tireFront);
 
     frontWheelSpinner.add(tireFront);
+
   }
 
   if (tireBack) {
@@ -338,11 +348,10 @@ gltfLoader.load('Car.glb', (gltf) => {
 
     backWheelSpinner = new THREE.Group();
 
-    backWheelPivot.add(backWheelSpinner);
-
     backWheelPivot.remove(tireBack);
 
     backWheelSpinner.add(tireBack);
+
   }
 
 });
@@ -494,6 +503,8 @@ gltfLoader.load('Track.glb', (gltf) => {
   trackTexture.wrapS = THREE.RepeatWrapping;
   trackTexture.wrapT = THREE.RepeatWrapping;
 
+  let spawnPosition = null;
+
   trackModel.traverse((child) => {
 
     if (child.isMesh) {
@@ -515,7 +526,24 @@ gltfLoader.load('Track.glb', (gltf) => {
       // invisible trigger plane
       finishLine.visible = false;
 
+      // SAVE SPAWN POSITION
+      spawnPosition = new THREE.Vector3();
+
+      finishLine.getWorldPosition(spawnPosition);
+
       console.log('Finish line found');
+
+    }
+
+    // ONLY WALLS COLLIDE
+    if (
+      child.isMesh &&
+      child.name.toLowerCase().includes('wall')
+    ) {
+
+      collisionModels.push(child);
+
+      console.log('Collision Wall:', child.name);
 
     }
 
@@ -523,11 +551,25 @@ gltfLoader.load('Track.glb', (gltf) => {
 
   scene.add(trackModel);
 
-  // COLLISIONS
-  registerCollisionModel(trackModel);
+if (spawnPosition) {
+
+  pendingSpawnPosition = new THREE.Vector3(
+    spawnPosition.x,
+    0,
+    spawnPosition.z + 8
+  );
+
+  if (carModel) {
+
+    carModel.position.copy(
+      pendingSpawnPosition
+    );
+
+  }
+
+}
 
 });
-
 // ────────────────────────────────────────────────────────
 // TEXTURE HELPERS
 // ────────────────────────────────────────────────────────
