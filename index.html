@@ -63,6 +63,7 @@ canvas { display: block; }
   <div id="info">
     W/S = Drive<br>
     A/D = Turn<br>
+    Space = Drift<br>
     Drag Mouse = Look Around
   </div>
   <div id="lapDisplay" style="font-size:13px; color:#222; margin-top:4px; line-height:1.8;">
@@ -104,15 +105,16 @@ const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
 scene.add(ambientLight);
 
 const directionalLight = new THREE.DirectionalLight(0xffffff, 3);
-directionalLight.position.set(30, 60, 40);
+directionalLight.position.set(100, 200, 100);
 directionalLight.castShadow = true;
-directionalLight.shadow.mapSize.set(2048, 2048);
-directionalLight.shadow.camera.near = 0.5;
-directionalLight.shadow.camera.far = 500;
-directionalLight.shadow.camera.left = -100;
-directionalLight.shadow.camera.right = 100;
-directionalLight.shadow.camera.top = 100;
-directionalLight.shadow.camera.bottom = -100;
+directionalLight.shadow.mapSize.set(4096, 4096);
+directionalLight.shadow.camera.near = 1;
+directionalLight.shadow.camera.far = 800;
+directionalLight.shadow.camera.left   = -350;
+directionalLight.shadow.camera.right  =  200;
+directionalLight.shadow.camera.top    =  250;
+directionalLight.shadow.camera.bottom = -200;
+directionalLight.shadow.bias = -0.0005;
 scene.add(directionalLight);
 
 // ─── LOADERS ─────────────────────────────────────────────
@@ -464,11 +466,27 @@ window.addEventListener('mousemove', (e) => {
 });
 
 // ─── DRIVING PHYSICS ─────────────────────────────────────
-let speed       = 0;
-const maxSpeed    = 0.28;
-const acceleration = 0.007;
-const friction     = 0.004;
-const turnSpeed    = 0.04;
+let speed        = 0;
+const maxSpeed      = 0.28;
+const acceleration  = 0.007;
+const friction      = 0.004;
+const turnSpeed     = 0.04;
+
+// ─── DRIFT STATE ─────────────────────────────────────────
+// Simcade drift: the car has a "facing" direction and a separate "velocity"
+// direction. Normally they stay aligned. When spacebar is held with momentum,
+// the velocity direction stops following the facing direction (oversteer),
+// creating a slide. The car still moves in the old velocity direction while
+// the body rotates, gradually bleeding back to aligned when released.
+//
+// lateralVel: how much the car is sliding sideways (world space, XZ)
+// driftAngle: angle between facing and velocity direction
+let lateralVel   = new THREE.Vector3(0, 0, 0);
+const DRIFT_GRIP        = 0.18;  // how fast lateral vel bleeds away normally
+const DRIFT_GRIP_SLIDE  = 0.04;  // grip while actively drifting (low = slidey)
+const DRIFT_BUILDUP     = 0.06;  // how fast oversteer builds when initiating
+const DRIFT_TURN_BOOST  = 1.8;   // turn speed multiplier while drifting
+const DRIFT_FRICTION    = 0.0015; // small speed cost while drifting
 
 // ─── CAMERA OFFSETS ──────────────────────────────────────
 const baseOffset = new THREE.Vector3(0, 3, 8);
@@ -524,13 +542,50 @@ function animate() {
     }
     speed = Math.max(-maxSpeed, Math.min(maxSpeed, speed));
 
-    // ── Steering (speed-scaled) ─────────────────────────
+    // ── Drift logic ─────────────────────────────────────
+    const isDrifting  = keys[' '] && Math.abs(speed) > maxSpeed * 0.3;
     const speedFactor = Math.min(Math.abs(speed) / maxSpeed, 1);
-    const turnDir = speed < 0 ? -1 : 1;
-    if (keys['a']) carModel.rotation.y += turnSpeed * speedFactor * turnDir;
-    if (keys['d']) carModel.rotation.y -= turnSpeed * speedFactor * turnDir;
+    const turnDir     = speed < 0 ? -1 : 1;
 
-    carModel.translateZ(-speed);
+    // Turn speed is boosted while drifting
+    const activeTurnSpeed = isDrifting
+      ? turnSpeed * DRIFT_TURN_BOOST
+      : turnSpeed;
+
+    if (keys['a']) carModel.rotation.y += activeTurnSpeed * speedFactor * turnDir;
+    if (keys['d']) carModel.rotation.y -= activeTurnSpeed * speedFactor * turnDir;
+
+    // Car's current facing direction in world space
+    const facingDir = new THREE.Vector3(0, 0, -1)
+      .applyQuaternion(carModel.quaternion);
+
+    // Forward movement along facing
+    const forwardVel = facingDir.clone().multiplyScalar(speed);
+
+    if (isDrifting) {
+      // Build lateral velocity: blend current lateral toward a new perpendicular kick
+      // based on how much the player is turning. This creates the oversteer feel.
+      const rightDir = new THREE.Vector3(1, 0, 0).applyQuaternion(carModel.quaternion);
+      const steerInput = (keys['a'] ? 1 : 0) - (keys['d'] ? 1 : 0);
+      lateralVel.addScaledVector(rightDir, steerInput * DRIFT_BUILDUP * speedFactor);
+
+      // Cap lateral velocity magnitude relative to speed
+      const maxLateral = Math.abs(speed) * 0.9;
+      if (lateralVel.length() > maxLateral) {
+        lateralVel.setLength(maxLateral);
+      }
+
+      // Low grip while actively sliding — lateral vel bleeds slowly
+      lateralVel.multiplyScalar(1 - DRIFT_GRIP_SLIDE);
+    } else {
+      // Tyres grip back up — bleed lateral velocity quickly
+      lateralVel.multiplyScalar(1 - DRIFT_GRIP);
+    }
+
+    // Total velocity = forward + lateral slide
+    const totalVel = forwardVel.clone().add(lateralVel);
+    totalVel.y = 0;
+    carModel.position.add(totalVel);
 
     // ── Collisions ──────────────────────────────────────
     updateAabbObstacles();
@@ -581,6 +636,8 @@ function animate() {
       let steerTarget = 0;
       if (keys['a']) steerTarget =  maxWheelSteer;
       if (keys['d']) steerTarget = -maxWheelSteer;
+      // Exaggerate steer angle visually during drift
+      if (isDrifting) steerTarget *= 1.5;
 
       wheelSteer += (steerTarget - wheelSteer) * 0.15;
       frontWheelPivot.rotation.y = wheelSteer;
