@@ -97,7 +97,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap;
 document.body.appendChild(renderer.domElement);
 
 // ─── LIGHTING ────────────────────────────────────────────
@@ -385,12 +385,12 @@ function resolveWallRaycasts() {
       // ── Glancing hit ── keep speed, rotate car away, tiny speed loss
       speed *= (1.0 - impactRatio * 0.3);
       lateralVel.set(0, 0, 0);
-      const reflectAngle = impactRatio * 0.8;
+      const reflectAngle = impactRatio * 1.4;
       const wallSide     = facingDir.clone().cross(wallNormal).y;
       carModel.rotation.y += reflectAngle * Math.sign(wallSide);
     } else {
       // ── Direct hit ── bounce back, speed loss scales with directness
-      const retention = 1.0 - (impactRatio - 0.5) * 1.4;
+      const retention = 1.0 - (impactRatio - 0.5) * 0.8;
       speed = -speed * Math.max(0, retention);
       lateralVel.set(0, 0, 0);
     }
