@@ -39,44 +39,10 @@ canvas { display: block; }
   line-height: 1.6;
 }
 
-/* Speedometer HUD */
-#hud {
-  position: absolute;
-  bottom: 20px;
-  right: 20px;
-  z-index: 10;
-  background: rgba(0,0,0,0.6);
-  color: #fff;
-  padding: 12px 18px;
-  border-radius: 10px;
-  font-size: 22px;
-  font-weight: bold;
-  letter-spacing: 1px;
-  text-align: center;
-  min-width: 110px;
-  pointer-events: none;
-}
-#hud span { font-size: 12px; font-weight: normal; display: block; margin-top: 2px; }
 
-/* Click-to-lock overlay */
-#lockOverlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0,0,0,0.45);
-  z-index: 20;
-  color: #fff;
-  font-size: 20px;
-  cursor: pointer;
-  user-select: none;
-}
 </style>
 </head>
 <body>
-
-<div id="lockOverlay">🖱️ Click to start driving</div>
 
 <div id="uiPanel">
   <label>Car Texture
@@ -95,18 +61,11 @@ canvas { display: block; }
     <input type="color" id="lightColor" value="#ffffff">
   </label>
   <div id="info">
-    <b>W / S</b> — Drive forward / back<br>
-    <b>A / D</b> — Turn left / right<br>
-    <b>Click canvas</b> — Lock mouse look<br>
-    <b>Esc</b> — Release mouse
+    W/S = Drive<br>
+    A/D = Turn<br>
+    Drag Mouse = Look Around
   </div>
 </div>
-
-<div id="hud">
-  <span id="speedVal">0</span>
-  <span>km/h</span>
-</div>
-
 <script type="importmap">
 {
   "imports": {
@@ -190,28 +149,35 @@ let backWheelMesh   = null;
 
 let wheelSteer = 0;
 const maxWheelSteer  = 0.5;
-// NOTE: The GLB wheels have a 90° X pre-rotation baked in,
-// so their spin axis in local space is Z, not X.
 const wheelSpinFactor = 0.15;
 
 // ─── PIVOT HELPER ────────────────────────────────────────
-// Creates a pivot group in place of the wheel so we can
-// rotate the pivot for steering without moving the wheel.
+// The wheel nodes both have translation=(0,0,0) in the GLTF — their geometry
+// is offset inside the mesh data itself. So wheel.position is (0,0,0) for both,
+// meaning a naive pivot.position.copy(wheel.position) places BOTH pivots at the
+// origin (the front axle), which is why the back wheel spun like a clock hand.
+//
+// Fix: compute the wheel's true geometric center from its bounding box in world
+// space, then place the pivot there and offset the mesh so it stays in place.
 function makeWheelPivot(wheel) {
   const pivot = new THREE.Group();
   const parent = wheel.parent;
 
-  // Remember the wheel's world position so the pivot sits exactly there
-  const worldPos = new THREE.Vector3();
-  wheel.getWorldPosition(worldPos);
+  // Get the wheel's world-space bounding box center
+  const box = new THREE.Box3().setFromObject(wheel);
+  const worldCenter = new THREE.Vector3();
+  box.getCenter(worldCenter);
 
-  // Add pivot to the same parent, at the wheel's position
+  // Convert world center to parent's local space for the pivot position
+  const localCenter = parent.worldToLocal(worldCenter.clone());
+
+  // Add pivot at the wheel's true geometric center
   parent.add(pivot);
-  pivot.position.copy(wheel.position);
+  pivot.position.copy(localCenter);
 
-  // Re-parent wheel under pivot at local origin
+  // Re-parent wheel under pivot; offset it so it doesn't visually jump
   parent.remove(wheel);
-  wheel.position.set(0, 0, 0);
+  wheel.position.sub(localCenter);
   pivot.add(wheel);
 
   return pivot;
@@ -284,30 +250,20 @@ const keys = {};
 window.addEventListener('keydown', (e) => keys[e.key.toLowerCase()] = true);
 window.addEventListener('keyup',   (e) => keys[e.key.toLowerCase()] = false);
 
-// ─── POINTER LOCK (mouse look) ───────────────────────────
+// ─── MOUSE LOOK ──────────────────────────────────────────
+let mouseDown = false;
 let yaw   = 0;
 let pitch = 0;
 const sensitivity = 0.004;
 
-const overlay = document.getElementById('lockOverlay');
+window.addEventListener('mousedown', () => mouseDown = true);
+window.addEventListener('mouseup',   () => mouseDown = false);
 
-overlay.addEventListener('click', () => {
-  renderer.domElement.requestPointerLock();
-});
-
-document.addEventListener('pointerlockchange', () => {
-  if (document.pointerLockElement === renderer.domElement) {
-    overlay.style.display = 'none';
-  } else {
-    overlay.style.display = 'flex';
-  }
-});
-
-document.addEventListener('mousemove', (e) => {
-  if (document.pointerLockElement !== renderer.domElement) return;
+window.addEventListener('mousemove', (e) => {
+  if (!mouseDown) return;
   yaw   -= e.movementX * sensitivity;
   pitch -= e.movementY * sensitivity;
-  pitch  = Math.max(-0.8, Math.min(0.4, pitch));
+  pitch  = Math.max(-0.8, Math.min(0.35, pitch));
 });
 
 // ─── DRIVING PHYSICS ─────────────────────────────────────
@@ -320,10 +276,6 @@ const turnSpeed    = 0.04;
 // ─── CAMERA OFFSETS ──────────────────────────────────────
 const baseOffset = new THREE.Vector3(0, 3, 8);
 const lookOffset = new THREE.Vector3(0, 1, 0);
-
-// ─── SPEEDOMETER ─────────────────────────────────────────
-const speedValEl = document.getElementById('speedVal');
-const KMH_FACTOR = 400; // visual scale to km/h
 
 // ─── ANIMATE ─────────────────────────────────────────────
 function animate() {
@@ -359,16 +311,14 @@ function animate() {
       wheelSteer += (steerTarget - wheelSteer) * 0.15;
       frontWheelPivot.rotation.y = wheelSteer;
 
-      // Spin axis is Z because wheel has a 90° X pre-rotation baked in GLB
       if (frontWheelMesh) {
-        frontWheelMesh.rotation.z -= speed * wheelSpinFactor;
+        frontWheelMesh.rotation.x += speed * wheelSpinFactor;
       }
     }
 
     // ── Back wheel: spin only ───────────────────────────
     if (backWheelMesh) {
-      // Same axis correction: use Z
-      backWheelMesh.rotation.z -= speed * wheelSpinFactor;
+      backWheelMesh.rotation.x += speed * wheelSpinFactor;
     }
 
     // ── Camera follow ───────────────────────────────────
@@ -376,9 +326,6 @@ function animate() {
     const offset = baseOffset.clone().applyEuler(rot).applyQuaternion(carModel.quaternion);
     camera.position.lerp(carModel.position.clone().add(offset), 0.1);
     camera.lookAt(carModel.position.clone().add(lookOffset));
-
-    // ── Speedometer ─────────────────────────────────────
-    speedValEl.textContent = Math.round(Math.abs(speed) * KMH_FACTOR);
   }
 
   renderer.render(scene, camera);
