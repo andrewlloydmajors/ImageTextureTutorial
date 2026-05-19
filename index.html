@@ -215,14 +215,26 @@ gltfLoader.load('Car.glb', (gltf) => {
 
   if (tireFront) {
     frontWheelMesh  = tireFront;
+    const fbox = new THREE.Box3().setFromObject(tireFront);
+    const fc = new THREE.Vector3(); fbox.getCenter(fc);
+    console.log('tireFront world center:', fc);
+    console.log('tireFront local position before pivot:', tireFront.position);
     frontWheelPivot = makeWheelPivot(tireFront);
+    console.log('frontWheelPivot position:', frontWheelPivot.position);
+    console.log('tireFront position after pivot:', tireFront.position);
   } else {
     console.warn('Front wheel node "tire1_4" not found in GLB.');
   }
 
   if (tireBack) {
     backWheelMesh  = tireBack;
+    const bbox = new THREE.Box3().setFromObject(tireBack);
+    const bc = new THREE.Vector3(); bbox.getCenter(bc);
+    console.log('tireBack world center:', bc);
+    console.log('tireBack local position before pivot:', tireBack.position);
     backWheelPivot = makeWheelPivot(tireBack);
+    console.log('backWheelPivot position:', backWheelPivot.position);
+    console.log('tireBack position after pivot:', tireBack.position);
   } else {
     console.warn('Back wheel node "tire2_2" not found in GLB.');
   }
