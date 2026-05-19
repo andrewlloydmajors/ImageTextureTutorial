@@ -168,7 +168,7 @@ scene.add(ground);
 
 
 // ----------------------------------------------------
-// CAR + WHEELS (FIXED PIVOT SYSTEM)
+// CAR + WHEELS (FIXED SYSTEM)
 // ----------------------------------------------------
 let carModel;
 
@@ -179,6 +179,7 @@ let wheelSpin = 0;
 let wheelSteer = 0;
 
 const maxWheelSteer = 0.6;
+const wheelSpinFactor = 0.12;
 
 gltfLoader.load('Car.glb', (gltf) => {
 
@@ -187,11 +188,11 @@ gltfLoader.load('Car.glb', (gltf) => {
   carModel.scale.set(1, 1, 1);
   carModel.position.set(0, 0, 0);
 
-  // --- FIX: drop car onto ground properly ---
+  // drop to ground properly
   const box = new THREE.Box3().setFromObject(carModel);
   carModel.position.y -= box.min.y;
 
-  // --- FIX: create proper wheel pivot ---
+  // find wheel + create pivot
   carModel.traverse((child) => {
 
     if (child.name === "tire1_4") {
@@ -252,14 +253,13 @@ window.addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
 
 
 // ----------------------------------------------------
-// MOUSE LOOK (FASTER)
+// MOUSE LOOK
 // ----------------------------------------------------
 let mouseDown = false;
 let yaw = 0;
 let pitch = 0;
 
 const sensitivity = 0.004;
-
 const minPitch = -0.8;
 const maxPitch = 0.35;
 
@@ -285,8 +285,6 @@ const maxSpeed = 0.25;
 const acceleration = 0.006;
 const friction = 0.003;
 const turnSpeed = 0.04;
-
-const wheelSpinFactor = 0.12;
 
 
 // ----------------------------------------------------
@@ -322,8 +320,9 @@ function animate() {
 
     carModel.translateZ(-speed);
 
+
     // -----------------------------
-    // WHEEL STEERING + SPIN
+    // WHEEL STEERING (front only)
     // -----------------------------
     if (frontWheelPivot) {
 
@@ -333,18 +332,23 @@ function animate() {
       if (keys['d']) targetSteer = -maxWheelSteer;
 
       wheelSteer += (targetSteer - wheelSteer) * 0.2;
-
-      // steer pivot (correct axis)
       frontWheelPivot.rotation.y = wheelSteer;
-
-      // spin actual wheel mesh
-      if (frontWheelMesh) {
-        wheelSpin -= speed;
-        frontWheelMesh.rotation.x = wheelSpin * wheelSpinFactor;
-      }
     }
 
+
+    // -----------------------------
+    // WHEEL SPIN (corrected direction)
+    // -----------------------------
+    if (frontWheelMesh) {
+      wheelSpin += speed; // FIXED direction (was inverted before)
+
+      frontWheelMesh.rotation.x = -wheelSpin * wheelSpinFactor;
+    }
+
+
+    // -----------------------------
     // CAMERA FOLLOW
+    // -----------------------------
     const rot = new THREE.Euler(pitch, yaw, 0, 'YXZ');
 
     const offset = baseOffset.clone();
