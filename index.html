@@ -179,15 +179,6 @@ scene.add(directionalLight);
 
 
 
-// ----------------------------------------------------
-// AXES HELPER (DEBUG)
-// ----------------------------------------------------
-
-const axesHelper = new THREE.AxesHelper(5);
-
-scene.add(axesHelper);
-
-
 
 // ----------------------------------------------------
 // TEXTURE LOADER
@@ -277,7 +268,7 @@ objLoader.load(
 
     // OBJ models are often rotated weirdly
 
-    carModel.rotation.x = -Math.PI / 2;
+    carModel.rotation.x = -Math.PI / 1;
 
     scene.add(carModel);
 
