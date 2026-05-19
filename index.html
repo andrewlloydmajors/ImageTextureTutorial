@@ -201,7 +201,7 @@ gltfLoader.load('Car.glb', (gltf) => {
   // then add the track's Y offset (0.76) so the car sits on the track surface.
   const box = new THREE.Box3().setFromObject(carModel);
   carModel.position.y -= box.min.y;
-  carModel.position.y += 0.76;
+  carModel.position.y += 0.38;
 
   // Enable shadows on all car meshes
   carModel.traverse((child) => {
@@ -364,7 +364,7 @@ function resolveWallRaycasts() {
     }
     if (hits.length === 0) continue;
 
-    // This sample point is over the wall — push car away from hit point horizontally
+    // Push car away from the wall surface
     const hitPt = hits[0].point;
     const pushDir = new THREE.Vector3(
       carPos.x - hitPt.x,
@@ -374,9 +374,22 @@ function resolveWallRaycasts() {
     if (pushDir.lengthSq() < 0.0001) continue;
     pushDir.normalize();
 
+    // Redirect velocity: strip out the component going into the wall,
+    // keep the component running along it so the car slides rather than bounces.
+    const facingDir = new THREE.Vector3(0, 0, -1).applyQuaternion(carModel.quaternion);
+    const velWorld  = facingDir.multiplyScalar(speed).add(lateralVel);
+    const intoWall  = velWorld.dot(pushDir.clone().negate());
+    if (intoWall > 0) {
+      // Remove the into-wall component, leave the along-wall component
+      velWorld.addScaledVector(pushDir, intoWall * 0.95);
+      // Back-solve speed from the new velocity projected onto facing
+      const newFacing = new THREE.Vector3(0, 0, -1).applyQuaternion(carModel.quaternion);
+      speed = velWorld.dot(newFacing);
+      lateralVel.copy(velWorld).addScaledVector(newFacing, -speed);
+    }
+
     const pushDist = localOffset.length() + 0.3;
     carModel.position.addScaledVector(pushDir, pushDist);
-    speed = -speed * BOUNCE;
     break;
   }
 }
@@ -579,6 +592,8 @@ function animate() {
 
       // Low grip while actively sliding — lateral vel bleeds slowly
       lateralVel.multiplyScalar(1 - DRIFT_GRIP_SLIDE);
+      // Small speed cost while drifting
+      speed *= (1 - DRIFT_FRICTION);
     } else {
       // Tyres grip back up — bleed lateral velocity quickly
       lateralVel.multiplyScalar(1 - DRIFT_GRIP);
