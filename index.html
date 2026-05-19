@@ -374,15 +374,21 @@ function resolveWallRaycasts() {
     if (pushDir.lengthSq() < 0.0001) continue;
     pushDir.normalize();
 
-    // Redirect velocity: strip out the component going into the wall,
-    // keep the component running along it so the car slides rather than bounces.
+    // Redirect velocity: decompose into into-wall and along-wall components.
+    // Energy loss scales with the impact angle — glancing hits lose almost nothing,
+    // direct hits lose most of the into-wall momentum.
     const facingDir = new THREE.Vector3(0, 0, -1).applyQuaternion(carModel.quaternion);
     const velWorld  = facingDir.multiplyScalar(speed).add(lateralVel);
     const intoWall  = velWorld.dot(pushDir.clone().negate());
     if (intoWall > 0) {
-      // Remove the into-wall component, leave the along-wall component
-      velWorld.addScaledVector(pushDir, intoWall * 0.95);
-      // Back-solve speed from the new velocity projected onto facing
+      // How direct is the impact? 0 = pure glance, 1 = dead-on
+      const totalSpeed  = velWorld.length();
+      const impactRatio = totalSpeed > 0.001 ? intoWall / totalSpeed : 0;
+      // Glancing (impactRatio ~0): keep ~95% of into-wall energy
+      // Direct (impactRatio ~1): keep ~5% of into-wall energy
+      const retention = 0.95 - impactRatio * 0.90;
+      velWorld.addScaledVector(pushDir, intoWall * (1 - retention));
+      // Back-solve speed and lateral from new velocity
       const newFacing = new THREE.Vector3(0, 0, -1).applyQuaternion(carModel.quaternion);
       speed = velWorld.dot(newFacing);
       lateralVel.copy(velWorld).addScaledVector(newFacing, -speed);
@@ -542,7 +548,14 @@ function updateLapTimer() {
   currentLapEl.textContent = formatTime(performance.now() - lapStartTime);
 }
 
-// ─── ANIMATE ─────────────────────────────────────────────
+// ─── STEERING STATE ──────────────────────────────────────
+// Instead of rotating instantly, we lerp toward a target turn rate each frame.
+// This makes steering feel gradual — it builds as you hold a key and fades when released.
+let steerRate = 0;  // current turn rate, lerped toward target each frame
+const STEER_BUILDUP  = 0.08;  // how fast steerRate reaches max (lower = more gradual)
+const STEER_FALLOFF  = 0.12;  // how fast steerRate returns to 0 on release
+
+
 function animate() {
   requestAnimationFrame(animate);
 
@@ -570,8 +583,11 @@ function animate() {
       ? turnSpeed * DRIFT_TURN_BOOST
       : turnSpeed;
 
-    if (keys['a']) carModel.rotation.y += activeTurnSpeed * speedFactor * turnDir;
-    if (keys['d']) carModel.rotation.y -= activeTurnSpeed * speedFactor * turnDir;
+    // Gradually build/fade steer rate instead of rotating instantly
+    const steerInput = (keys['a'] ? 1 : 0) - (keys['d'] ? 1 : 0);
+    const steerTarget = steerInput * activeTurnSpeed * speedFactor * turnDir;
+    steerRate += (steerTarget - steerRate) * (steerInput !== 0 ? STEER_BUILDUP : STEER_FALLOFF);
+    carModel.rotation.y += steerRate;
 
     // Car's current facing direction in world space
     const facingDir = new THREE.Vector3(0, 0, -1)
@@ -581,10 +597,7 @@ function animate() {
     const forwardVel = facingDir.clone().multiplyScalar(speed);
 
     if (isDrifting) {
-      // Build lateral velocity: blend current lateral toward a new perpendicular kick
-      // based on how much the player is turning. This creates the oversteer feel.
       const rightDir = new THREE.Vector3(1, 0, 0).applyQuaternion(carModel.quaternion);
-      const steerInput = (keys['a'] ? 1 : 0) - (keys['d'] ? 1 : 0);
       lateralVel.addScaledVector(rightDir, steerInput * DRIFT_BUILDUP * speedFactor);
 
       // Cap lateral velocity magnitude relative to speed
@@ -598,10 +611,7 @@ function animate() {
       // Small speed cost while drifting
       speed *= (1 - DRIFT_FRICTION);
     } else {
-      // Natural cornering bleed: add a small lateral nudge when turning at speed,
-      // proportional to how hard the car is turning and how fast it's going.
-      // This makes the car feel loose and alive rather than pivoting on a point.
-      const steerInput = (keys['a'] ? 1 : 0) - (keys['d'] ? 1 : 0);
+      // Natural cornering bleed: add a small lateral nudge when turning at speed.
       if (steerInput !== 0 && Math.abs(speed) > maxSpeed * 0.2) {
         const rightDir = new THREE.Vector3(1, 0, 0).applyQuaternion(carModel.quaternion);
         lateralVel.addScaledVector(rightDir, steerInput * NATURAL_BLEED * speedFactor);
