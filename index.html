@@ -323,7 +323,7 @@ function animate() {
     carModel.translateZ(-speed);
 
     // -----------------------------
-    // WHEEL STEERING + SPIN (FIXED)
+    // WHEEL STEERING + SPIN
     // -----------------------------
     if (frontWheelPivot) {
 
@@ -339,7 +339,7 @@ function animate() {
 
       // spin actual wheel mesh
       if (frontWheelMesh) {
-        wheelSpin += speed;
+        wheelSpin -= speed;
         frontWheelMesh.rotation.x = wheelSpin * wheelSpinFactor;
       }
     }
