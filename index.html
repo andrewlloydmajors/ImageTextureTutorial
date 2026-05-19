@@ -106,7 +106,7 @@ canvas {
 import * as THREE from 'three';
 
 import { OrbitControls } from './jsm/controls/OrbitControls.js';
-import { OBJLoader } from './jsm/loaders/OBJLoader.js';
+import { GLTFLoader } from './jsm/loaders/GLTFLoader.js';
 
 
 
@@ -182,17 +182,17 @@ scene.add(directionalLight);
 
 
 
-
 // ----------------------------------------------------
-// TEXTURE LOADER
+// LOADERS
 // ----------------------------------------------------
 
 const textureLoader = new THREE.TextureLoader();
+const gltfLoader = new GLTFLoader();
 
 
 
 // ----------------------------------------------------
-// DEFAULT SKYBOX
+// SKYBOX
 // ----------------------------------------------------
 
 textureLoader.load('RMSField.png', (bgTexture) => {
@@ -200,7 +200,6 @@ textureLoader.load('RMSField.png', (bgTexture) => {
   bgTexture.mapping = THREE.EquirectangularReflectionMapping;
 
   scene.background = bgTexture;
-
   scene.environment = bgTexture;
 
 });
@@ -225,11 +224,8 @@ const groundMaterial = new THREE.MeshStandardMaterial({
 });
 
 const ground = new THREE.Mesh(
-
   new THREE.PlaneGeometry(6000, 6000),
-
   groundMaterial
-
 );
 
 ground.rotation.x = -Math.PI / 2;
@@ -239,74 +235,44 @@ scene.add(ground);
 
 
 // ----------------------------------------------------
-// OBJ LOADER
-// ----------------------------------------------------
-
-const objLoader = new OBJLoader();
-
-
-
-// ----------------------------------------------------
-// LOAD CAR MODEL
+// CAR (GLB)
 // ----------------------------------------------------
 
 let carModel;
 
-objLoader.load(
+gltfLoader.load(
+  'Car.glb',
+  (gltf) => {
 
-  'Car.obj',
-
-  (obj) => {
-
-    carModel = obj;
-
-    // IMPORTANT:
-    // OBJ models often need scale adjustments
+    carModel = gltf.scene;
 
     carModel.scale.set(1, 1, 1);
-
-    // Lift slightly above ground
-
     carModel.position.set(0, 0.5, 0);
-
-    // OBJ models are often rotated weirdly
-
-    // carModel.rotation.x = -Math.PI / 2;
 
     scene.add(carModel);
 
     console.log("Car Loaded");
 
   },
-
   undefined,
-
-  (error) => {
-
-    console.error("Car Error:", error);
-
-  }
-
+  (error) => console.error(error)
 );
 
 
 
 // ----------------------------------------------------
-// LOAD BUILDING MODEL
+// BUILDING (GLB)
 // ----------------------------------------------------
 
 let buildingModel;
 
-objLoader.load(
+gltfLoader.load(
+  'Tower.glb',
+  (gltf) => {
 
-  'Tower.obj',
-
-  (obj) => {
-
-    buildingModel = obj;
+    buildingModel = gltf.scene;
 
     buildingModel.position.set(15, 0, -15);
-
     buildingModel.scale.set(1, 1, 1);
 
     scene.add(buildingModel);
@@ -314,49 +280,49 @@ objLoader.load(
     console.log("Building Loaded");
 
   },
-
   undefined,
-
-  (error) => {
-
-    console.error("Building Error:", error);
-
-  }
-
+  (error) => console.error(error)
 );
 
 
 
 // ----------------------------------------------------
-// CAR TEXTURE UPLOAD
+// TEXTURE HELPERS
 // ----------------------------------------------------
 
-const carTextureUpload = document.getElementById('carTextureUpload');
+function applyTexture(model, texture) {
 
-carTextureUpload.addEventListener('change', (event) => {
+  texture.flipY = false;
 
-  const file = event.target.files[0];
+  model.traverse((child) => {
 
-  if (!file || !carModel) return;
+    if (child.isMesh) {
 
-  const imageURL = URL.createObjectURL(file);
+      child.material.map = texture;
+      child.material.needsUpdate = true;
 
-  textureLoader.load(imageURL, (texture) => {
+    }
 
-    texture.flipY = false;
+  });
 
-    carModel.traverse((child) => {
+}
 
-      if (child.isMesh) {
 
-        child.material.map = texture;
 
-        child.material.needsUpdate = true;
+// ----------------------------------------------------
+// CAR TEXTURE
+// ----------------------------------------------------
 
-      }
+document.getElementById('carTextureUpload')
+.addEventListener('change', (e) => {
 
-    });
+  if (!carModel) return;
 
+  const file = e.target.files[0];
+  const url = URL.createObjectURL(file);
+
+  textureLoader.load(url, (tex) => {
+    applyTexture(carModel, tex);
   });
 
 });
@@ -364,35 +330,19 @@ carTextureUpload.addEventListener('change', (event) => {
 
 
 // ----------------------------------------------------
-// BUILDING TEXTURE UPLOAD
+// BUILDING TEXTURE
 // ----------------------------------------------------
 
-const buildingTextureUpload = document.getElementById('buildingTextureUpload');
+document.getElementById('buildingTextureUpload')
+.addEventListener('change', (e) => {
 
-buildingTextureUpload.addEventListener('change', (event) => {
+  if (!buildingModel) return;
 
-  const file = event.target.files[0];
+  const file = e.target.files[0];
+  const url = URL.createObjectURL(file);
 
-  if (!file || !buildingModel) return;
-
-  const imageURL = URL.createObjectURL(file);
-
-  textureLoader.load(imageURL, (texture) => {
-
-    texture.flipY = false;
-
-    buildingModel.traverse((child) => {
-
-      if (child.isMesh) {
-
-        child.material.map = texture;
-
-        child.material.needsUpdate = true;
-
-      }
-
-    });
-
+  textureLoader.load(url, (tex) => {
+    applyTexture(buildingModel, tex);
   });
 
 });
@@ -403,23 +353,20 @@ buildingTextureUpload.addEventListener('change', (event) => {
 // SKYBOX UPLOAD
 // ----------------------------------------------------
 
-const skyboxUpload = document.getElementById('skyboxUpload');
+document.getElementById('skyboxUpload')
+.addEventListener('change', (e) => {
 
-skyboxUpload.addEventListener('change', (event) => {
-
-  const file = event.target.files[0];
-
+  const file = e.target.files[0];
   if (!file) return;
 
-  const imageURL = URL.createObjectURL(file);
+  const url = URL.createObjectURL(file);
 
-  textureLoader.load(imageURL, (texture) => {
+  textureLoader.load(url, (tex) => {
 
-    texture.mapping = THREE.EquirectangularReflectionMapping;
+    tex.mapping = THREE.EquirectangularReflectionMapping;
 
-    scene.background = texture;
-
-    scene.environment = texture;
+    scene.background = tex;
+    scene.environment = tex;
 
   });
 
@@ -428,30 +375,24 @@ skyboxUpload.addEventListener('change', (event) => {
 
 
 // ----------------------------------------------------
-// GROUND TEXTURE UPLOAD
+// GROUND TEXTURE
 // ----------------------------------------------------
 
-const groundUpload = document.getElementById('groundUpload');
+document.getElementById('groundUpload')
+.addEventListener('change', (e) => {
 
-groundUpload.addEventListener('change', (event) => {
-
-  const file = event.target.files[0];
-
+  const file = e.target.files[0];
   if (!file) return;
 
-  const imageURL = URL.createObjectURL(file);
+  const url = URL.createObjectURL(file);
 
-  textureLoader.load(imageURL, (texture) => {
+  textureLoader.load(url, (tex) => {
 
-    texture.wrapS = THREE.RepeatWrapping;
-    texture.wrapT = THREE.RepeatWrapping;
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(300, 300);
 
-    texture.repeat.set(300, 300);
-
-    texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
-
-    groundMaterial.map = texture;
-
+    groundMaterial.map = tex;
     groundMaterial.needsUpdate = true;
 
   });
@@ -461,29 +402,26 @@ groundUpload.addEventListener('change', (event) => {
 
 
 // ----------------------------------------------------
-// LIGHT COLOR PICKER
+// LIGHT COLOR
 // ----------------------------------------------------
 
-const lightColorInput = document.getElementById('lightColor');
+document.getElementById('lightColor')
+.addEventListener('input', (e) => {
 
-lightColorInput.addEventListener('input', (event) => {
-
-  directionalLight.color.set(event.target.value);
+  directionalLight.color.set(e.target.value);
 
 });
 
 
 
 // ----------------------------------------------------
-// WINDOW RESIZE
+// RESIZE
 // ----------------------------------------------------
 
 window.addEventListener('resize', () => {
 
   camera.aspect = window.innerWidth / window.innerHeight;
-
   camera.updateProjectionMatrix();
-
   renderer.setSize(window.innerWidth, window.innerHeight);
 
 });
@@ -491,27 +429,23 @@ window.addEventListener('resize', () => {
 
 
 // ----------------------------------------------------
-// KEYBOARD INPUT
+// INPUT
 // ----------------------------------------------------
 
 const keys = {};
 
-window.addEventListener('keydown', (event) => {
-
-  keys[event.key.toLowerCase()] = true;
-
+window.addEventListener('keydown', (e) => {
+  keys[e.key.toLowerCase()] = true;
 });
 
-window.addEventListener('keyup', (event) => {
-
-  keys[event.key.toLowerCase()] = false;
-
+window.addEventListener('keyup', (e) => {
+  keys[e.key.toLowerCase()] = false;
 });
 
 
 
 // ----------------------------------------------------
-// CAR MOVEMENT
+// MOVEMENT
 // ----------------------------------------------------
 
 let speed = 0;
@@ -522,42 +456,14 @@ function animate() {
 
   if (carModel) {
 
-    // FORWARD / BACKWARD
+    if (keys['w']) speed = 0.08;
+    else if (keys['s']) speed = -0.05;
+    else speed = 0;
 
-    if (keys['w']) {
-
-      speed = -0.05;
-
-    }
-    else if (keys['s']) {
-
-      speed = 0.08;
-
-    }
-    else {
-
-      speed = 0;
-
-    }
-
-    // TURNING
-
-    if (keys['a']) {
-
-      carModel.rotation.y += 0.03;
-
-    }
-
-    if (keys['d']) {
-
-      carModel.rotation.y -= 0.03;
-
-    }
-
-    // MOVE FORWARD
+    if (keys['a']) carModel.rotation.y += 0.03;
+    if (keys['d']) carModel.rotation.y -= 0.03;
 
     carModel.translateZ(speed);
-
   }
 
   renderer.render(scene, camera);
