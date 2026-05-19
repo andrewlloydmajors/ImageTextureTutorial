@@ -5,7 +5,6 @@
 <title>Student Texture Mapping World</title>
 
 <style>
-
 body {
   margin: 0;
   overflow: hidden;
@@ -13,29 +12,19 @@ body {
   font-family: Arial, sans-serif;
 }
 
-canvas {
-  display: block;
-}
+canvas { display: block; }
 
 #uiPanel {
-
   position: absolute;
   top: 10px;
   left: 10px;
-
   z-index: 10;
-
   background: rgba(255,255,255,0.92);
-
   padding: 14px;
-
   border-radius: 12px;
-
   display: flex;
   flex-direction: column;
-
   gap: 10px;
-
   max-width: 250px;
 }
 
@@ -52,32 +41,30 @@ canvas {
   margin-top: 6px;
   line-height: 1.4;
 }
-
 </style>
 </head>
 
 <body>
 
 <div id="uiPanel">
-
   <label>
     Car Texture
-    <input type="file" id="carTextureUpload" accept="image/png, image/jpeg">
+    <input type="file" id="carTextureUpload">
   </label>
 
   <label>
     Building Texture
-    <input type="file" id="buildingTextureUpload" accept="image/png, image/jpeg">
+    <input type="file" id="buildingTextureUpload">
   </label>
 
   <label>
     Skybox / 360 Background
-    <input type="file" id="skyboxUpload" accept="image/png, image/jpeg">
+    <input type="file" id="skyboxUpload">
   </label>
 
   <label>
     Ground Texture
-    <input type="file" id="groundUpload" accept="image/png, image/jpeg">
+    <input type="file" id="groundUpload">
   </label>
 
   <label>
@@ -90,7 +77,6 @@ canvas {
     A/D = Turn<br>
     Drag Mouse = Look Around
   </div>
-
 </div>
 
 <script type="importmap">
@@ -110,7 +96,6 @@ import { GLTFLoader } from './jsm/loaders/GLTFLoader.js';
 // ----------------------------------------------------
 // SCENE
 // ----------------------------------------------------
-
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0xbfd1e5, 80, 600);
 
@@ -118,7 +103,6 @@ scene.fog = new THREE.Fog(0xbfd1e5, 80, 600);
 // ----------------------------------------------------
 // CAMERA
 // ----------------------------------------------------
-
 const camera = new THREE.PerspectiveCamera(
   75,
   window.innerWidth / window.innerHeight,
@@ -130,7 +114,6 @@ const camera = new THREE.PerspectiveCamera(
 // ----------------------------------------------------
 // RENDERER
 // ----------------------------------------------------
-
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
@@ -140,7 +123,6 @@ document.body.appendChild(renderer.domElement);
 // ----------------------------------------------------
 // LIGHTING
 // ----------------------------------------------------
-
 const ambientLight = new THREE.AmbientLight(0xffffff, 2);
 scene.add(ambientLight);
 
@@ -152,7 +134,6 @@ scene.add(directionalLight);
 // ----------------------------------------------------
 // LOADERS
 // ----------------------------------------------------
-
 const textureLoader = new THREE.TextureLoader();
 const gltfLoader = new GLTFLoader();
 
@@ -160,30 +141,22 @@ const gltfLoader = new GLTFLoader();
 // ----------------------------------------------------
 // SKYBOX
 // ----------------------------------------------------
-
 textureLoader.load('RMSField.png', (bgTexture) => {
-
   bgTexture.mapping = THREE.EquirectangularReflectionMapping;
-
   scene.background = bgTexture;
   scene.environment = bgTexture;
-
 });
 
 
 // ----------------------------------------------------
 // GROUND
 // ----------------------------------------------------
-
 const grassTexture = textureLoader.load('RMSgrass.png');
-
 grassTexture.wrapS = THREE.RepeatWrapping;
 grassTexture.wrapT = THREE.RepeatWrapping;
 grassTexture.repeat.set(300, 300);
 
-const groundMaterial = new THREE.MeshStandardMaterial({
-  map: grassTexture
-});
+const groundMaterial = new THREE.MeshStandardMaterial({ map: grassTexture });
 
 const ground = new THREE.Mesh(
   new THREE.PlaneGeometry(6000, 6000),
@@ -195,10 +168,14 @@ scene.add(ground);
 
 
 // ----------------------------------------------------
-// CAR
+// CAR + WHEELS
 // ----------------------------------------------------
-
 let carModel;
+let frontWheel = null;
+let wheelSpin = 0;
+let wheelSteer = 0;
+
+const maxWheelSteer = 0.6;
 
 gltfLoader.load('Car.glb', (gltf) => {
 
@@ -207,69 +184,65 @@ gltfLoader.load('Car.glb', (gltf) => {
   carModel.scale.set(1, 1, 1);
   carModel.position.set(0, 0.5, 0);
 
-  scene.add(carModel);
+  // find wheel by name
+  carModel.traverse((child) => {
+    if (child.name === "tire1_4") {
+      frontWheel = child;
+      console.log("Front wheel found");
+    }
+  });
 
+  scene.add(carModel);
 });
 
 
 // ----------------------------------------------------
 // BUILDING
 // ----------------------------------------------------
-
 let buildingModel;
 
 gltfLoader.load('Tower.glb', (gltf) => {
-
   buildingModel = gltf.scene;
-
   buildingModel.position.set(15, 0, -15);
-
   scene.add(buildingModel);
-
 });
 
 
 // ----------------------------------------------------
 // TEXTURE HELPERS
 // ----------------------------------------------------
-
 function applyTexture(model, texture) {
-
   texture.flipY = false;
 
   model.traverse((child) => {
-
     if (child.isMesh) {
       child.material.map = texture;
       child.material.needsUpdate = true;
     }
-
   });
-
 }
 
 
 // ----------------------------------------------------
-// INPUT (DRIVING)
+// INPUT
 // ----------------------------------------------------
-
 const keys = {};
-
 window.addEventListener('keydown', (e) => keys[e.key.toLowerCase()] = true);
 window.addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
 
 
 // ----------------------------------------------------
-// MOUSE LOOK (NEW)
+// MOUSE LOOK (FASTER)
 // ----------------------------------------------------
-
 let mouseDown = false;
 let yaw = 0;
 let pitch = 0;
 
-const sensitivity = 0.002;
+// ↑ increased sensitivity
+const sensitivity = 0.004;
+
 const minPitch = -0.8;
-const maxPitch = 0.3;
+const maxPitch = 0.35;
 
 window.addEventListener('mousedown', () => mouseDown = true);
 window.addEventListener('mouseup', () => mouseDown = false);
@@ -288,26 +261,27 @@ window.addEventListener('mousemove', (e) => {
 // ----------------------------------------------------
 // DRIVING PHYSICS
 // ----------------------------------------------------
-
 let speed = 0;
-let maxSpeed = 0.25;
-let acceleration = 0.006;
-let friction = 0.003;
-let turnSpeed = 0.04;
+const maxSpeed = 0.25;
+const acceleration = 0.006;
+const friction = 0.003;
+const turnSpeed = 0.04;
+
+
+// wheel spin scaling (visual only)
+const wheelSpinFactor = 0.12;
 
 
 // ----------------------------------------------------
-// CAMERA SETTINGS
+// CAMERA OFFSETS
 // ----------------------------------------------------
-
 const baseOffset = new THREE.Vector3(0, 3, 8);
 const lookOffset = new THREE.Vector3(0, 1, 0);
 
 
 // ----------------------------------------------------
-// ANIMATION LOOP
+// LOOP
 // ----------------------------------------------------
-
 function animate() {
 
   requestAnimationFrame(animate);
@@ -328,14 +302,37 @@ function animate() {
 
     const speedFactor = Math.min(Math.abs(speed) / maxSpeed, 1);
 
+    // steering
     if (keys['a']) carModel.rotation.y += turnSpeed * speedFactor;
     if (keys['d']) carModel.rotation.y -= turnSpeed * speedFactor;
 
+    // move
     carModel.translateZ(-speed);
 
+    // -----------------------------
+    // WHEEL STEERING + SPIN
+    // -----------------------------
+    if (frontWheel) {
+
+      let targetSteer = 0;
+
+      if (keys['a']) targetSteer = maxWheelSteer;
+      if (keys['d']) targetSteer = -maxWheelSteer;
+
+      wheelSteer += (targetSteer - wheelSteer) * 0.2;
+
+      frontWheel.rotation.y = wheelSteer;
+    }
+
+    // wheel rolling based on movement
+    wheelSpin += speed;
+
+    if (frontWheel) {
+      frontWheel.rotation.x = wheelSpin * wheelSpinFactor;
+    }
 
     // -----------------------------
-    // CAMERA FOLLOW + MOUSE LOOK
+    // CAMERA FOLLOW (smooth orbit feel)
     // -----------------------------
     const rot = new THREE.Euler(pitch, yaw, 0, 'YXZ');
 
@@ -344,8 +341,7 @@ function animate() {
     offset.applyQuaternion(carModel.quaternion);
 
     const desiredPos = carModel.position.clone().add(offset);
-
-    camera.position.lerp(desiredPos, 0.08);
+    camera.position.lerp(desiredPos, 0.1);
 
     const lookTarget = carModel.position.clone().add(lookOffset);
     camera.lookAt(lookTarget);
@@ -360,74 +356,51 @@ animate();
 // ----------------------------------------------------
 // RESIZE
 // ----------------------------------------------------
-
 window.addEventListener('resize', () => {
-
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
-
 });
 
 
 // ----------------------------------------------------
 // TEXTURE UPLOADS
 // ----------------------------------------------------
-
 document.getElementById('carTextureUpload').addEventListener('change', (e) => {
-
   if (!carModel) return;
-
   const url = URL.createObjectURL(e.target.files[0]);
   textureLoader.load(url, (tex) => applyTexture(carModel, tex));
-
 });
 
 document.getElementById('buildingTextureUpload').addEventListener('change', (e) => {
-
   if (!buildingModel) return;
-
   const url = URL.createObjectURL(e.target.files[0]);
   textureLoader.load(url, (tex) => applyTexture(buildingModel, tex));
-
 });
 
 document.getElementById('skyboxUpload').addEventListener('change', (e) => {
-
   const url = URL.createObjectURL(e.target.files[0]);
-
   textureLoader.load(url, (tex) => {
-
     tex.mapping = THREE.EquirectangularReflectionMapping;
-
     scene.background = tex;
     scene.environment = tex;
-
   });
-
 });
 
 document.getElementById('groundUpload').addEventListener('change', (e) => {
-
   const url = URL.createObjectURL(e.target.files[0]);
-
   textureLoader.load(url, (tex) => {
-
     tex.wrapS = THREE.RepeatWrapping;
     tex.wrapT = THREE.RepeatWrapping;
     tex.repeat.set(300, 300);
 
     groundMaterial.map = tex;
     groundMaterial.needsUpdate = true;
-
   });
-
 });
 
 document.getElementById('lightColor').addEventListener('input', (e) => {
-
   directionalLight.color.set(e.target.value);
-
 });
 
 </script>
