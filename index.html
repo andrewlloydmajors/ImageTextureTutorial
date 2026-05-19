@@ -23,16 +23,12 @@ canvas {
   top: 10px;
   left: 10px;
   z-index: 10;
-
   background: rgba(255,255,255,0.92);
-
   padding: 14px;
   border-radius: 12px;
-
   display: flex;
   flex-direction: column;
   gap: 10px;
-
   max-width: 250px;
 }
 
@@ -61,7 +57,6 @@ canvas {
 <body>
 
 <div id="uiPanel">
-
   <label>Car Texture
     <input type="file" id="carTextureUpload">
   </label>
@@ -89,7 +84,6 @@ canvas {
 
     <span id="timer">Time: 0.00</span>
   </div>
-
 </div>
 
 <script type="importmap">
@@ -106,18 +100,16 @@ import * as THREE from 'three';
 import { GLTFLoader } from './jsm/loaders/GLTFLoader.js';
 
 
-// ────────────────────────────────────────────────────────
+// ─────────────────────────────
 // SCENE
-// ────────────────────────────────────────────────────────
-
+// ─────────────────────────────
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0xbfd1e5, 80, 600);
 
 
-// ────────────────────────────────────────────────────────
+// ─────────────────────────────
 // CAMERA
-// ────────────────────────────────────────────────────────
-
+// ─────────────────────────────
 const camera = new THREE.PerspectiveCamera(
   75,
   window.innerWidth / window.innerHeight,
@@ -126,77 +118,51 @@ const camera = new THREE.PerspectiveCamera(
 );
 
 
-// ────────────────────────────────────────────────────────
+// ─────────────────────────────
 // RENDERER
-// ────────────────────────────────────────────────────────
-
-const renderer = new THREE.WebGLRenderer({
-  antialias: true
-});
-
+// ─────────────────────────────
+const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
-
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-
 document.body.appendChild(renderer.domElement);
 
 
-// ────────────────────────────────────────────────────────
+// ─────────────────────────────
 // LIGHTING
-// ────────────────────────────────────────────────────────
-
+// ─────────────────────────────
 const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
 scene.add(ambientLight);
 
 const directionalLight = new THREE.DirectionalLight(0xffffff, 3);
-
 directionalLight.position.set(30, 60, 40);
-
 directionalLight.castShadow = true;
-
 directionalLight.shadow.mapSize.set(2048, 2048);
-
-directionalLight.shadow.camera.near = 0.5;
-directionalLight.shadow.camera.far = 500;
-
-directionalLight.shadow.camera.left = -100;
-directionalLight.shadow.camera.right = 100;
-directionalLight.shadow.camera.top = 100;
-directionalLight.shadow.camera.bottom = -100;
-
 scene.add(directionalLight);
 
 
-// ────────────────────────────────────────────────────────
+// ─────────────────────────────
 // LOADERS
-// ────────────────────────────────────────────────────────
-
+// ─────────────────────────────
 const textureLoader = new THREE.TextureLoader();
 const gltfLoader = new GLTFLoader();
 
 
-// ────────────────────────────────────────────────────────
+// ─────────────────────────────
 // SKYBOX
-// ────────────────────────────────────────────────────────
-
+// ─────────────────────────────
 textureLoader.load('RMSField.png', (tex) => {
-
   tex.mapping = THREE.EquirectangularReflectionMapping;
-
   scene.background = tex;
   scene.environment = tex;
-
 });
 
 
-// ────────────────────────────────────────────────────────
+// ─────────────────────────────
 // GROUND
-// ────────────────────────────────────────────────────────
-
+// ─────────────────────────────
 const grassTexture = textureLoader.load('RMSgrass.png');
-
 grassTexture.wrapS = THREE.RepeatWrapping;
 grassTexture.wrapT = THREE.RepeatWrapping;
 grassTexture.repeat.set(300, 300);
@@ -212,21 +178,15 @@ const ground = new THREE.Mesh(
 
 ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
-
 scene.add(ground);
 
 
-// ────────────────────────────────────────────────────────
+// ─────────────────────────────
 // CAR STATE
-// ────────────────────────────────────────────────────────
-
+// ─────────────────────────────
 let carModel = null;
-
 let frontWheelPivot = null;
 let frontWheelSpinner = null;
-let frontWheelMesh = null;
-
-let backWheelPivot = null;
 let backWheelSpinner = null;
 
 let wheelSteer = 0;
@@ -235,627 +195,274 @@ const maxWheelSteer = 0.3;
 const wheelSpinFactor = 0.4;
 
 
-// ────────────────────────────────────────────────────────
-// RACE TIMER
-// ────────────────────────────────────────────────────────
-
-let trackModel = null;
+// ─────────────────────────────
+// RACE
+// ─────────────────────────────
 let finishLine = null;
-
 const finishBox = new THREE.Box3();
-const carLapBox = new THREE.Box3();
+const carBox = new THREE.Box3();
 
 let raceStarted = false;
 let raceFinished = false;
-
 let startTime = 0;
-let currentLapTime = 0;
-
+let lapTime = 0;
 let touchingFinish = false;
 
 
-// ────────────────────────────────────────────────────────
-// WHEEL PIVOT HELPER
-// ────────────────────────────────────────────────────────
+// ─────────────────────────────
+// COLLISION SYSTEM (FIXED)
+// ─────────────────────────────
+const obstacleMeshes = [];
+const obstacleBoxes = [];
 
-function makeWheelPivot(wheel) {
+const tempBox = new THREE.Box3();
 
-  const pivot = new THREE.Group();
-  const parent = wheel.parent;
-
-  const box = new THREE.Box3().setFromObject(wheel);
-
-  const worldCenter = new THREE.Vector3();
-  box.getCenter(worldCenter);
-
-  const localCenter = parent.worldToLocal(worldCenter.clone());
-
-  parent.add(pivot);
-
-  pivot.position.copy(localCenter);
-
-  parent.remove(wheel);
-
-  wheel.position.sub(localCenter);
-
-  pivot.add(wheel);
-
-  return pivot;
+function registerMeshForCollision(mesh) {
+  obstacleMeshes.push(mesh);
 }
 
 
-// ────────────────────────────────────────────────────────
-// LOAD CAR
-// ────────────────────────────────────────────────────────
+// ─────────────────────────────
+// COLLISION UPDATE
+// ─────────────────────────────
+function updateCollisions() {
+  obstacleBoxes.length = 0;
 
-let pendingSpawnPosition = null;
+  for (const mesh of obstacleMeshes) {
+    tempBox.setFromObject(mesh);
+    obstacleBoxes.push(tempBox.clone());
+  }
+}
+
+
+// ─────────────────────────────
+// RESOLVE COLLISIONS
+// ─────────────────────────────
+const BOUNCE = 0.4;
+
+function resolveCollisions(speedRef) {
+  if (!carModel) return;
+
+  carBox.setFromObject(carModel);
+
+  for (const box of obstacleBoxes) {
+    if (!carBox.intersectsBox(box)) continue;
+
+    const carCenter = carBox.getCenter(new THREE.Vector3());
+    const boxCenter = box.getCenter(new THREE.Vector3());
+
+    const dx = carCenter.x - boxCenter.x;
+    const dz = carCenter.z - boxCenter.z;
+
+    const overlapX = Math.min(carBox.max.x - box.min.x, box.max.x - carBox.min.x);
+    const overlapZ = Math.min(carBox.max.z - box.min.z, box.max.z - carBox.min.z);
+
+    if (overlapX < overlapZ) {
+      carModel.position.x += Math.sign(dx) * overlapX;
+    } else {
+      carModel.position.z += Math.sign(dz) * overlapZ;
+    }
+
+    speed = -speed * BOUNCE;
+  }
+}
+
+
+// ─────────────────────────────
+// LOAD CAR
+// ─────────────────────────────
+let pendingSpawn = null;
 
 gltfLoader.load('Car.glb', (gltf) => {
 
   carModel = gltf.scene;
-
   carModel.scale.set(1, 1, 1);
-  carModel.position.set(0, 0, 0);
 
   const box = new THREE.Box3().setFromObject(carModel);
-
   carModel.position.y -= box.min.y;
 
   carModel.traverse((child) => {
-
-    if (child.isMesh) {
-
-      child.castShadow = true;
-      child.receiveShadow = true;
-
-    }
-
+    if (child.isMesh) child.castShadow = true;
   });
 
   scene.add(carModel);
 
-  // APPLY TRACK SPAWN IF IT EXISTS
-  if (pendingSpawnPosition) {
-
-    carModel.position.copy(pendingSpawnPosition);
-
-  }
-
-  carModel.updateMatrixWorld(true);
-
-  const tireFront = carModel.getObjectByName('tire1_4');
-  const tireBack = carModel.getObjectByName('tire2_2');
-
-  if (tireFront) {
-
-    frontWheelMesh = tireFront;
-
-    frontWheelPivot = makeWheelPivot(tireFront);
-
-    frontWheelSpinner = new THREE.Group();
-
-    frontWheelPivot.add(frontWheelSpinner);
-
-    frontWheelPivot.remove(tireFront);
-
-    frontWheelSpinner.add(tireFront);
-
-  }
-
-  if (tireBack) {
-
-    backWheelPivot = makeWheelPivot(tireBack);
-
-    backWheelSpinner = new THREE.Group();
-
-    backWheelPivot.remove(tireBack);
-
-    backWheelSpinner.add(tireBack);
-
-  }
-
+  if (pendingSpawn) carModel.position.copy(pendingSpawn);
 });
 
 
-// ────────────────────────────────────────────────────────
-// COLLISION SYSTEM
-// ────────────────────────────────────────────────────────
-
-const collisionModels = [];
-const obstacleBoxes = [];
-
-const _carBox = new THREE.Box3();
-const _meshBox = new THREE.Box3();
-
-function registerCollisionModel(model) {
-
-  collisionModels.push(model);
-
-}
-
-function updateObstacleBoxes() {
-
-  obstacleBoxes.length = 0;
-
-  for (const model of collisionModels) {
-
-    model.traverse((child) => {
-
-      if (child.isMesh) {
-
-        _meshBox.setFromObject(child);
-
-        obstacleBoxes.push(_meshBox.clone());
-
-      }
-
-    });
-
-  }
-
-}
-
-const BOUNCE = 0.4;
-
-const CAR_INSET_X = 0.7;
-const CAR_INSET_Z = 1.0;
-
-function resolveCollisions() {
-
-  if (!carModel) return;
-
-  _carBox.setFromObject(carModel);
-
-  _carBox.min.x += CAR_INSET_X;
-  _carBox.max.x -= CAR_INSET_X;
-
-  _carBox.min.z += CAR_INSET_Z;
-  _carBox.max.z -= CAR_INSET_Z;
-
-  for (const box of obstacleBoxes) {
-
-    if (!_carBox.intersectsBox(box)) continue;
-
-    const overlapX = Math.min(
-      _carBox.max.x - box.min.x,
-      box.max.x - _carBox.min.x
-    );
-
-    const overlapZ = Math.min(
-      _carBox.max.z - box.min.z,
-      box.max.z - _carBox.min.z
-    );
-
-    if (overlapX < overlapZ) {
-
-      const dir =
-        (_carBox.getCenter(new THREE.Vector3()).x <
-        box.getCenter(new THREE.Vector3()).x)
-        ? -1
-        : 1;
-
-      carModel.position.x += dir * overlapX;
-
-    } else {
-
-      const dir =
-        (_carBox.getCenter(new THREE.Vector3()).z <
-        box.getCenter(new THREE.Vector3()).z)
-        ? -1
-        : 1;
-
-      carModel.position.z += dir * overlapZ;
-
-    }
-
-    speed = -speed * BOUNCE;
-
-    _carBox.setFromObject(carModel);
-
-  }
-
-}
-
-
-// ────────────────────────────────────────────────────────
-// BUILDING
-// ────────────────────────────────────────────────────────
-
-let buildingModel;
-
+// ─────────────────────────────
+// BUILDING (FIXED COLLISIONS)
+// ─────────────────────────────
 gltfLoader.load('Tower.glb', (gltf) => {
 
-  buildingModel = gltf.scene;
+  const building = gltf.scene;
+  building.position.set(15, 0, -15);
 
-  buildingModel.position.set(15, 0, -15);
-
-  buildingModel.traverse((child) => {
-
+  building.traverse((child) => {
     if (child.isMesh) {
-
       child.castShadow = true;
       child.receiveShadow = true;
 
+      registerMeshForCollision(child);
     }
-
   });
 
-  scene.add(buildingModel);
-
-  registerCollisionModel(buildingModel);
-
+  scene.add(building);
 });
 
 
-// ────────────────────────────────────────────────────────
-// TRACK + FINISH LINE
-// ────────────────────────────────────────────────────────
-
+// ─────────────────────────────
+// TRACK
+// ─────────────────────────────
 gltfLoader.load('Track.glb', (gltf) => {
 
-  trackModel = gltf.scene;
+  const track = gltf.scene;
 
-  // AUTO LOAD TRACK TEXTURE
   const trackTexture = textureLoader.load('Track.png');
-
   trackTexture.flipY = false;
 
-  trackTexture.wrapS = THREE.RepeatWrapping;
-  trackTexture.wrapT = THREE.RepeatWrapping;
+  let spawn = null;
 
-  let spawnPosition = null;
-
-  trackModel.traverse((child) => {
+  track.traverse((child) => {
 
     if (child.isMesh) {
-
-      child.castShadow = true;
-      child.receiveShadow = true;
-
-      // APPLY TRACK TEXTURE
       child.material.map = trackTexture;
       child.material.needsUpdate = true;
-
+      child.castShadow = true;
+      child.receiveShadow = true;
     }
 
-    // FIND FINISH LINE OBJECT
     if (child.name === 'Finishline') {
-
       finishLine = child;
-
-      // invisible trigger plane
       finishLine.visible = false;
 
-      // SAVE SPAWN POSITION
-      spawnPosition = new THREE.Vector3();
-
-      finishLine.getWorldPosition(spawnPosition);
-
-      console.log('Finish line found');
-
+      spawn = new THREE.Vector3();
+      finishLine.getWorldPosition(spawn);
     }
 
-    // ONLY WALLS COLLIDE
-    if (
-      child.isMesh &&
-      child.name.toLowerCase().includes('wall')
-    ) {
-
-      collisionModels.push(child);
-
-      console.log('Collision Wall:', child.name);
-
+    if (child.isMesh && child.name.toLowerCase().includes('wall')) {
+      registerMeshForCollision(child);
     }
-
   });
 
-  scene.add(trackModel);
+  scene.add(track);
 
-if (spawnPosition) {
-
-  pendingSpawnPosition = new THREE.Vector3(
-    spawnPosition.x,
-    0,
-    spawnPosition.z + 8
-  );
-
-  if (carModel) {
-
-    carModel.position.copy(
-      pendingSpawnPosition
-    );
-
+  if (spawn) {
+    pendingSpawn = new THREE.Vector3(spawn.x, 0, spawn.z + 8);
   }
-
-}
-
 });
-// ────────────────────────────────────────────────────────
-// TEXTURE HELPERS
-// ────────────────────────────────────────────────────────
-
-function applyTexture(model, texture) {
-
-  texture.flipY = false;
-
-  model.traverse((child) => {
-
-    if (child.isMesh) {
-
-      child.material.map = texture;
-      child.material.needsUpdate = true;
-
-    }
-
-  });
-
-}
 
 
-// ────────────────────────────────────────────────────────
+// ─────────────────────────────
 // INPUT
-// ────────────────────────────────────────────────────────
-
+// ─────────────────────────────
 const keys = {};
 
-window.addEventListener('keydown', (e) => {
-  keys[e.key.toLowerCase()] = true;
-});
-
-window.addEventListener('keyup', (e) => {
-  keys[e.key.toLowerCase()] = false;
-});
+window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
 
-// ────────────────────────────────────────────────────────
+// ─────────────────────────────
 // MOUSE LOOK
-// ────────────────────────────────────────────────────────
-
+// ─────────────────────────────
+let yaw = 0, pitch = 0;
 let mouseDown = false;
 
-let yaw = 0;
-let pitch = 0;
-
-const sensitivity = 0.004;
-
-window.addEventListener('mousedown', () => {
-  mouseDown = true;
-});
-
-window.addEventListener('mouseup', () => {
-  mouseDown = false;
-});
+window.addEventListener('mousedown', () => mouseDown = true);
+window.addEventListener('mouseup', () => mouseDown = false);
 
 window.addEventListener('mousemove', (e) => {
-
   if (!mouseDown) return;
 
-  yaw -= e.movementX * sensitivity;
-  pitch -= e.movementY * sensitivity;
+  yaw -= e.movementX * 0.004;
+  pitch -= e.movementY * 0.004;
 
   pitch = Math.max(-0.8, Math.min(0.35, pitch));
-
 });
 
 
-// ────────────────────────────────────────────────────────
-// DRIVING PHYSICS
-// ────────────────────────────────────────────────────────
-
+// ─────────────────────────────
+// PHYSICS
+// ─────────────────────────────
 let speed = 0;
-
 const maxSpeed = 0.28;
-const acceleration = 0.007;
+const accel = 0.007;
 const friction = 0.004;
 const turnSpeed = 0.04;
 
 
-// ────────────────────────────────────────────────────────
+// ─────────────────────────────
 // CAMERA OFFSETS
-// ────────────────────────────────────────────────────────
-
+// ─────────────────────────────
 const baseOffset = new THREE.Vector3(0, 3, 8);
-
 const lookOffset = new THREE.Vector3(0, 1, 0);
 
 
-// ────────────────────────────────────────────────────────
-// WHEEL SPIN HELPERS
-// ────────────────────────────────────────────────────────
-
-const _spinAxis = new THREE.Vector3(1, 0, 0);
-
-const _spinQ = new THREE.Quaternion();
-
-
-// ────────────────────────────────────────────────────────
+// ─────────────────────────────
 // ANIMATE
-// ────────────────────────────────────────────────────────
-
+// ─────────────────────────────
 function animate() {
 
   requestAnimationFrame(animate);
 
   if (carModel) {
 
-    // ACCELERATION
+    if (keys['w']) speed += accel;
+    else if (keys['s']) speed -= accel;
+    else speed *= 0.98;
 
-    if (keys['w']) {
-
-      speed += acceleration;
-
-    } else if (keys['s']) {
-
-      speed -= acceleration;
-
-    } else {
-
-      if (speed > friction) speed -= friction;
-      else if (speed < -friction) speed += friction;
-      else speed = 0;
-
-    }
-
-    speed = Math.max(-maxSpeed, Math.min(maxSpeed, speed));
-
-
-    // STEERING
-
-    const speedFactor = Math.min(
-      Math.abs(speed) / maxSpeed,
-      1
-    );
+    speed = THREE.MathUtils.clamp(speed, -maxSpeed, maxSpeed);
 
     const turnDir = speed < 0 ? -1 : 1;
 
-    if (keys['a']) {
-      carModel.rotation.y +=
-        turnSpeed * speedFactor * turnDir;
-    }
-
-    if (keys['d']) {
-      carModel.rotation.y -=
-        turnSpeed * speedFactor * turnDir;
-    }
-
-
-    // MOVE
+    if (keys['a']) carModel.rotation.y += turnSpeed * turnDir;
+    if (keys['d']) carModel.rotation.y -= turnSpeed * turnDir;
 
     carModel.translateZ(-speed);
 
-
-    // COLLISIONS
-
-    updateObstacleBoxes();
-
+    updateCollisions();
     resolveCollisions();
 
-
-    // FRONT WHEEL
-
-    if (frontWheelPivot) {
-
-      let steerTarget = 0;
-
-      if (keys['a']) steerTarget = maxWheelSteer;
-      if (keys['d']) steerTarget = -maxWheelSteer;
-
-      wheelSteer +=
-        (steerTarget - wheelSteer) * 0.15;
-
-      frontWheelPivot.rotation.y = wheelSteer;
-
-      _spinQ.setFromAxisAngle(
-        _spinAxis,
-        -speed * wheelSpinFactor
-      );
-
-      frontWheelSpinner.quaternion.premultiply(_spinQ);
-
-    }
-
-
-    // BACK WHEEL
-
-    if (backWheelSpinner) {
-
-      _spinQ.setFromAxisAngle(
-        _spinAxis,
-        -speed * wheelSpinFactor
-      );
-
-      backWheelSpinner.quaternion.premultiply(_spinQ);
-
-    }
-
-
-    // FINISH LINE TIMER
-
+    // FINISH
     if (finishLine) {
 
       finishBox.setFromObject(finishLine);
+      carBox.setFromObject(carModel);
 
-      carLapBox.setFromObject(carModel);
+      const touching = carBox.intersectsBox(finishBox);
 
-      carLapBox.min.x += 0.5;
-      carLapBox.max.x -= 0.5;
-
-      carLapBox.min.z += 0.5;
-      carLapBox.max.z -= 0.5;
-
-      const intersecting =
-        carLapBox.intersectsBox(finishBox);
-
-      if (intersecting && !touchingFinish) {
-
+      if (touching && !touchingFinish) {
         touchingFinish = true;
 
         if (!raceStarted) {
-
           raceStarted = true;
-          raceFinished = false;
-
           startTime = performance.now();
-
-          console.log('Race Started');
-
         } else if (!raceFinished) {
-
           raceFinished = true;
-
-          currentLapTime =
-            (performance.now() - startTime) / 1000;
-
-          console.log(
-            'Lap Complete:',
-            currentLapTime.toFixed(2)
-          );
-
+          lapTime = (performance.now() - startTime) / 1000;
         }
-
       }
 
-      if (!intersecting) {
+      if (!touching) touchingFinish = false;
 
-        touchingFinish = false;
-
-      }
-
-      const timerEl =
-        document.getElementById('timer');
+      const timer = document.getElementById('timer');
 
       if (raceStarted && !raceFinished) {
-
-        const current =
-          (performance.now() - startTime) / 1000;
-
-        timerEl.textContent =
-          'Time: ' + current.toFixed(2);
-
+        timer.textContent =
+          'Time: ' + ((performance.now() - startTime)/1000).toFixed(2);
       }
 
       if (raceFinished) {
-
-        timerEl.textContent =
-          'Final Time: ' +
-          currentLapTime.toFixed(2);
-
+        timer.textContent =
+          'Final Time: ' + lapTime.toFixed(2);
       }
-
     }
 
-
     // CAMERA
+    const rot = new THREE.Euler(pitch, yaw, 0, 'YXZ');
 
-    const rot = new THREE.Euler(
-      pitch,
-      yaw,
-      0,
-      'YXZ'
-    );
-
-    const offset = baseOffset
-      .clone()
+    const offset = baseOffset.clone()
       .applyEuler(rot)
       .applyQuaternion(carModel.quaternion);
 
@@ -864,110 +471,69 @@ function animate() {
       0.1
     );
 
-    camera.lookAt(
-      carModel.position.clone().add(lookOffset)
-    );
-
+    camera.lookAt(carModel.position.clone().add(lookOffset));
   }
 
   renderer.render(scene, camera);
-
 }
 
 animate();
 
 
-// ────────────────────────────────────────────────────────
+// ─────────────────────────────
 // RESIZE
-// ────────────────────────────────────────────────────────
-
+// ─────────────────────────────
 window.addEventListener('resize', () => {
-
-  camera.aspect =
-    window.innerWidth / window.innerHeight;
-
+  camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
-
-  renderer.setSize(
-    window.innerWidth,
-    window.innerHeight
-  );
-
+  renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
 
-// ────────────────────────────────────────────────────────
+// ─────────────────────────────
 // TEXTURE UPLOADS
-// ────────────────────────────────────────────────────────
-
-document.getElementById('carTextureUpload')
-.addEventListener('change', (e) => {
-
+// ─────────────────────────────
+document.getElementById('carTextureUpload').onchange = (e) => {
   if (!carModel) return;
+  textureLoader.load(URL.createObjectURL(e.target.files[0]), tex => {
+    carModel.traverse(c => {
+      if (c.isMesh) {
+        c.material.map = tex;
+        c.material.needsUpdate = true;
+      }
+    });
+  });
+};
 
-  textureLoader.load(
-    URL.createObjectURL(e.target.files[0]),
-    (tex) => applyTexture(carModel, tex)
-  );
+document.getElementById('buildingTextureUpload').onchange = (e) => {
+  textureLoader.load(URL.createObjectURL(e.target.files[0]), tex => {
+    obstacleMeshes.forEach(m => {
+      m.material.map = tex;
+      m.material.needsUpdate = true;
+    });
+  });
+};
 
-});
+document.getElementById('skyboxUpload').onchange = (e) => {
+  textureLoader.load(URL.createObjectURL(e.target.files[0]), tex => {
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    scene.background = tex;
+    scene.environment = tex;
+  });
+};
 
-document.getElementById('buildingTextureUpload')
-.addEventListener('change', (e) => {
+document.getElementById('groundUpload').onchange = (e) => {
+  textureLoader.load(URL.createObjectURL(e.target.files[0]), tex => {
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(300, 300);
+    groundMaterial.map = tex;
+    groundMaterial.needsUpdate = true;
+  });
+};
 
-  if (!buildingModel) return;
-
-  textureLoader.load(
-    URL.createObjectURL(e.target.files[0]),
-    (tex) => applyTexture(buildingModel, tex)
-  );
-
-});
-
-document.getElementById('skyboxUpload')
-.addEventListener('change', (e) => {
-
-  textureLoader.load(
-    URL.createObjectURL(e.target.files[0]),
-    (tex) => {
-
-      tex.mapping =
-        THREE.EquirectangularReflectionMapping;
-
-      scene.background = tex;
-      scene.environment = tex;
-
-    }
-  );
-
-});
-
-document.getElementById('groundUpload')
-.addEventListener('change', (e) => {
-
-  textureLoader.load(
-    URL.createObjectURL(e.target.files[0]),
-    (tex) => {
-
-      tex.wrapS = THREE.RepeatWrapping;
-      tex.wrapT = THREE.RepeatWrapping;
-
-      tex.repeat.set(300, 300);
-
-      groundMaterial.map = tex;
-      groundMaterial.needsUpdate = true;
-
-    }
-  );
-
-});
-
-document.getElementById('lightColor')
-.addEventListener('input', (e) => {
-
+document.getElementById('lightColor').oninput = (e) => {
   directionalLight.color.set(e.target.value);
-
-});
+};
 
 </script>
 </body>
