@@ -58,7 +58,7 @@ canvas { display: block; }
     <input type="file" id="groundUpload">
   </label>
   <label>Sunlight Color
-    <input type="color" id="lightColor" value="#ffffff">
+    <input type="color" id="lightColor" value="#aaaaaa">
   </label>
   <div id="info">
     W/S = Drive<br>
@@ -103,7 +103,7 @@ document.body.appendChild(renderer.domElement);
 const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
 scene.add(ambientLight);
 
-const directionalLight = new THREE.DirectionalLight(0xffffff, 3);
+const directionalLight = new THREE.DirectionalLight(0xaaaaaa, 3);
 directionalLight.position.set(30, 60, 40);
 directionalLight.castShadow = true;
 directionalLight.shadow.mapSize.set(2048, 2048);
@@ -123,7 +123,6 @@ const gltfLoader   = new GLTFLoader();
 textureLoader.load('RMSField.png', (tex) => {
   tex.mapping = THREE.EquirectangularReflectionMapping;
   scene.background = tex;
-  scene.environment = tex;
 });
 
 // ─── GROUND ──────────────────────────────────────────────
@@ -192,8 +191,9 @@ function makeWheelPivot(wheel) {
 gltfLoader.load('Car.glb', (gltf) => {
   carModel = gltf.scene;
   carModel.scale.set(1, 1, 1);
-  // Spawn at the center of the BeginTrack piece (X: -67.5 to -40.5, Z: -10.36 to 10.36)
+  // Spawn at the center of the BeginTrack piece, rotated 90° CCW
   carModel.position.set(-54, 0, 0);
+  carModel.rotation.y = Math.PI / 2;
 
   // Ground-align: shift up so the bottom of the bounding box is at y=0
   const box = new THREE.Box3().setFromObject(carModel);
@@ -425,6 +425,7 @@ gltfLoader.load('Track.glb', (gltf) => {
     finishLineBox = new THREE.Box3().setFromObject(finishNode);
     finishLineBox.min.y -= 1;
     finishLineBox.max.y += 1;
+    finishNode.visible = false;
   }
 });
 
@@ -630,7 +631,6 @@ document.getElementById('skyboxUpload').addEventListener('change', (e) => {
   textureLoader.load(URL.createObjectURL(e.target.files[0]), (tex) => {
     tex.mapping = THREE.EquirectangularReflectionMapping;
     scene.background = tex;
-    scene.environment = tex;
   });
 });
 
