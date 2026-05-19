@@ -322,7 +322,7 @@ function animate() {
       frontWheelPivot.rotation.y = wheelSteer;
 
       // Spin pivot around world X via quaternion to avoid gimbal with baked rotation
-      _spinQ.setFromAxisAngle(_spinAxis, speed * wheelSpinFactor);
+      _spinQ.setFromAxisAngle(_spinAxis, -speed * wheelSpinFactor);
       frontWheelPivot.quaternion.premultiply(_spinQ);
       // Re-apply steer on top
       frontWheelPivot.rotation.y = wheelSteer;
@@ -330,7 +330,7 @@ function animate() {
 
     // ── Back wheel: spin only ───────────────────────────
     if (backWheelPivot) {
-      _spinQ.setFromAxisAngle(_spinAxis, speed * wheelSpinFactor);
+      _spinQ.setFromAxisAngle(_spinAxis, -speed * wheelSpinFactor);
       backWheelPivot.quaternion.premultiply(_spinQ);
     }
 
