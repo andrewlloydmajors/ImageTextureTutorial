@@ -360,46 +360,43 @@ function resolveWallRaycasts() {
 
     const hits = _raycaster.intersectObjects(wallMeshes, false);
     if (doLog && hits.length > 0) {
-      console.log('Wall hit at offset', localOffset, 'dist:', hits[0].distance, 'pt:', hits[0].point);
+      console.log('impactRatio:', Math.abs(new THREE.Vector3(0,0,-1).applyQuaternion(carModel.quaternion).dot(hits[0].face.normal.clone().transformDirection(hits[0].object.matrixWorld))).toFixed(3));
     }
     if (hits.length === 0) continue;
 
-    // Push car away from the wall surface
-    const hitPt = hits[0].point;
-    const pushDir = new THREE.Vector3(
-      carPos.x - hitPt.x,
-      0,
-      carPos.z - hitPt.z
-    );
-    if (pushDir.lengthSq() < 0.0001) continue;
-    pushDir.normalize();
+    // Use the actual face normal of the wall as the push direction —
+    // this is a true perpendicular-to-wall vector regardless of where the ray hit.
+    const hit        = hits[0];
+    const wallNormal = hit.face.normal.clone()
+      .transformDirection(hit.object.matrixWorld);
+    wallNormal.y = 0;
+    if (wallNormal.lengthSq() < 0.0001) continue;
+    wallNormal.normalize();
 
-    const facingDir  = new THREE.Vector3(0, 0, -1).applyQuaternion(carModel.quaternion);
+    // Ensure normal points toward the car (away from wall), not into it
+    const toHit = new THREE.Vector3(carPos.x - hit.point.x, 0, carPos.z - hit.point.z);
+    if (wallNormal.dot(toHit) < 0) wallNormal.negate();
 
-    // Measure impact angle from how the car is FACING relative to the wall,
-    // not from velocity — velocity dot pushDir was always high due to geometry.
-    // pushDir points away from the wall (wall normal). The car's facing dot
-    // with the wall normal tells us: 0 = parallel to wall, 1 = head-on into it.
-    const facingIntoPushDir = Math.abs(facingDir.dot(pushDir));  // 0=parallel, 1=perpendicular
-    const impactRatio = facingIntoPushDir;
+    const facingDir   = new THREE.Vector3(0, 0, -1).applyQuaternion(carModel.quaternion);
+    // impactRatio: 0 = car facing parallel to wall, 1 = car facing straight into wall
+    const impactRatio = Math.abs(facingDir.dot(wallNormal));
 
     if (impactRatio < 0.5) {
-      // ── Glancing hit (car facing more parallel than perpendicular to wall) ──
+      // ── Glancing hit ── keep speed, rotate car away, tiny speed loss
       speed *= (1.0 - impactRatio * 0.3);
       lateralVel.set(0, 0, 0);
-      // Rotate car away from wall
-      const reflectAngle = Math.asin(Math.min(impactRatio * 1.2, 1.0)) * 0.6;
-      const wallSide = facingDir.clone().cross(pushDir).y;
+      const reflectAngle = impactRatio * 0.8;
+      const wallSide     = facingDir.clone().cross(wallNormal).y;
       carModel.rotation.y += reflectAngle * Math.sign(wallSide);
     } else {
-      // ── Direct hit (car facing more perpendicular to wall) ──
+      // ── Direct hit ── bounce back, speed loss scales with directness
       const retention = 1.0 - (impactRatio - 0.5) * 1.4;
       speed = -speed * Math.max(0, retention);
       lateralVel.set(0, 0, 0);
     }
 
     const pushDist = localOffset.length() + 0.3;
-    carModel.position.addScaledVector(pushDir, pushDist);
+    carModel.position.addScaledVector(wallNormal, pushDist);
     break;
   }
 }
