@@ -186,7 +186,7 @@ scene.add(directionalLight);
 
 const textureLoader = new THREE.TextureLoader();
 
-textureLoader.load('RMSField.jpg', (bgTexture) => {
+textureLoader.load('RMSField.png', (bgTexture) => {
 
   bgTexture.mapping = THREE.EquirectangularReflectionMapping;
 
@@ -202,7 +202,7 @@ textureLoader.load('RMSField.jpg', (bgTexture) => {
 // GROUND
 // ----------------------------------------------------
 
-const grassTexture = textureLoader.load('grass.jpg');
+const grassTexture = textureLoader.load('RMSgrass.png');
 
 grassTexture.wrapS = THREE.RepeatWrapping;
 grassTexture.wrapT = THREE.RepeatWrapping;
