@@ -263,7 +263,7 @@ objLoader.load(
     // IMPORTANT:
     // OBJ models often need scale adjustments
 
-    carModel.scale.set(0.05, 0.05, 0.05);
+    carModel.scale.set(1, 1, 1);
 
     // Lift slightly above ground
 
@@ -526,12 +526,12 @@ function animate() {
 
     if (keys['w']) {
 
-      speed = 0.08;
+      speed = -0.05;
 
     }
     else if (keys['s']) {
 
-      speed = -0.05;
+      speed = 0.08;
 
     }
     else {
