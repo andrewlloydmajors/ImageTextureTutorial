@@ -269,9 +269,19 @@ function updateObstacleBoxes() {
 // Check car AABB against all obstacle boxes.
 // If overlapping, push car back out and bounce speed.
 const BOUNCE = 0.4; // fraction of speed reflected back (0=stop dead, 1=full bounce)
+// How much to shrink the car's collision box on each side (in world units).
+// Car is 2.684 wide, 5.668 long. Inset trims it down to roughly the body.
+const CAR_INSET_X = 0.6;  // trims ~1.2 total off width
+const CAR_INSET_Z = 0.9;  // trims ~1.8 total off length
+
 function resolveCollisions() {
   if (!carModel) return;
   _carBox.setFromObject(carModel);
+  // Shrink box to match visual body, excluding wheel overhang
+  _carBox.min.x += CAR_INSET_X;
+  _carBox.max.x -= CAR_INSET_X;
+  _carBox.min.z += CAR_INSET_Z;
+  _carBox.max.z -= CAR_INSET_Z;
 
   for (const box of obstacleBoxes) {
     if (!_carBox.intersectsBox(box)) continue;
@@ -367,7 +377,6 @@ const _spinAxis = new THREE.Vector3(1, 0, 0);
 const _spinQ = new THREE.Quaternion();
 
 // ─── ANIMATE ─────────────────────────────────────────────
-let _debugLogged = false;
 function animate() {
   requestAnimationFrame(animate);
 
@@ -394,25 +403,6 @@ function animate() {
 
     // ── Collisions ──────────────────────────────────────
     updateObstacleBoxes();
-    if (!_debugLogged && obstacleBoxes.length > 0) {
-      _carBox.setFromObject(carModel);
-      console.log('Car box size:', {
-        x: (_carBox.max.x - _carBox.min.x).toFixed(3),
-        y: (_carBox.max.y - _carBox.min.y).toFixed(3),
-        z: (_carBox.max.z - _carBox.min.z).toFixed(3),
-      });
-      obstacleBoxes.forEach((b, i) => {
-        console.log(`Obstacle box [${i}] size:`, {
-          x: (b.max.x - b.min.x).toFixed(3),
-          y: (b.max.y - b.min.y).toFixed(3),
-          z: (b.max.z - b.min.z).toFixed(3),
-        }, 'center:', {
-          x: ((b.min.x + b.max.x) / 2).toFixed(3),
-          z: ((b.min.z + b.max.z) / 2).toFixed(3),
-        });
-      });
-      _debugLogged = true;
-    }
     resolveCollisions();
 
     // ── Front wheel: steer + spin ───────────────────────
