@@ -544,19 +544,19 @@ function animate() {
 
     if (keys['a']) {
 
-      carModel.rotation.z += 0.03;
+      carModel.rotation.y += 0.03;
 
     }
 
     if (keys['d']) {
 
-      carModel.rotation.z -= 0.03;
+      carModel.rotation.y -= 0.03;
 
     }
 
     // MOVE FORWARD
 
-    carModel.translateY(speed);
+    carModel.translateZ(speed);
 
   }
 
