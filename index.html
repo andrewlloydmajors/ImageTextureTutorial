@@ -65,6 +65,9 @@ canvas { display: block; }
     A/D = Turn<br>
     Drag Mouse = Look Around
   </div>
+  <div id="lapDisplay" style="font-size:15px; font-weight:bold; color:#222; margin-top:4px;">
+    Lap: <span id="lapCount">0</span>
+  </div>
 </div>
 <script type="importmap">
 {
@@ -318,15 +321,40 @@ gltfLoader.load('Tower.glb', (gltf) => {
   registerCollisionModel(buildingModel);
 });
 
-// ─── RACETRACK (future) ──────────────────────────────────
-// When you're ready, load your track GLB and call registerCollisionModel on it:
-//
-// let trackModel;
-// gltfLoader.load('Racetrack.glb', (gltf) => {
-//   trackModel = gltf.scene;
-//   scene.add(trackModel);
-//   registerCollisionModel(trackModel);
-// });
+// ─── TRACK ───────────────────────────────────────────────
+let trackModel;
+let finishLineBox = null;  // Box3 of the Finishline mesh, checked for lap completion
+let hasLeftFinishLine = false;  // prevents repeated triggers while sitting on the line
+
+gltfLoader.load('Track.glb', (gltf) => {
+  trackModel = gltf.scene;
+  trackModel.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow    = true;
+      child.receiveShadow = true;
+    }
+  });
+  scene.add(trackModel);
+  trackModel.updateMatrixWorld(true);
+
+  // Only the Wall node blocks the car — Track surface and Finishline do not
+  const wallNode = trackModel.getObjectByName('Wall');
+  if (wallNode) {
+    // Wrap in a minimal model-like object registerCollisionModel expects
+    const wallOnly = { traverse: (fn) => wallNode.traverse(fn) };
+    registerCollisionModel(wallOnly);
+  }
+
+  // Store the finish line box for lap detection
+  const finishNode = trackModel.getObjectByName('Finishline');
+  if (finishNode) {
+    finishLineBox = new THREE.Box3().setFromObject(finishNode);
+    // Expand it a little on Y so the car (which rides at y~0) intersects reliably
+    finishLineBox.min.y -= 1;
+    finishLineBox.max.y += 1;
+  }
+});
+
 
 // ─── TEXTURE HELPERS ─────────────────────────────────────
 function applyTexture(model, texture) {
@@ -376,6 +404,10 @@ const lookOffset = new THREE.Vector3(0, 1, 0);
 const _spinAxis = new THREE.Vector3(1, 0, 0);
 const _spinQ = new THREE.Quaternion();
 
+// ─── LAP COUNTER ─────────────────────────────────────────
+let lapCount = 0;
+const lapCountEl = document.getElementById('lapCount');
+
 // ─── ANIMATE ─────────────────────────────────────────────
 function animate() {
   requestAnimationFrame(animate);
@@ -405,6 +437,20 @@ function animate() {
     // ── Collisions ──────────────────────────────────────
     updateObstacleBoxes();
     resolveCollisions();
+
+    // ── Finish line ─────────────────────────────────────
+    if (finishLineBox) {
+      _carBox.setFromObject(carModel);
+      if (_carBox.intersectsBox(finishLineBox)) {
+        if (hasLeftFinishLine) {
+          lapCount++;
+          lapCountEl.textContent = lapCount;
+          hasLeftFinishLine = false;
+        }
+      } else {
+        hasLeftFinishLine = true;
+      }
+    }
 
     // ── Front wheel: steer + spin ───────────────────────
     if (frontWheelPivot) {
