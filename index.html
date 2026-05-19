@@ -61,8 +61,8 @@ canvas {
 <div id="uiPanel">
 
   <label>
-     Texture
-    <input type="file" id="TextureUpload" accept="image/png, image/jpeg">
+    Car Texture
+    <input type="file" id="carTextureUpload" accept="image/png, image/jpeg">
   </label>
 
   <label>
@@ -106,7 +106,6 @@ canvas {
 import * as THREE from 'three';
 
 import { OrbitControls } from './jsm/controls/OrbitControls.js';
-import { GLTFLoader } from './jsm/loaders/GLTFLoader.js';
 import { OBJLoader } from './jsm/loaders/OBJLoader.js';
 
 
@@ -181,10 +180,26 @@ scene.add(directionalLight);
 
 
 // ----------------------------------------------------
-// DEFAULT SKYBOX
+// AXES HELPER (DEBUG)
+// ----------------------------------------------------
+
+const axesHelper = new THREE.AxesHelper(5);
+
+scene.add(axesHelper);
+
+
+
+// ----------------------------------------------------
+// TEXTURE LOADER
 // ----------------------------------------------------
 
 const textureLoader = new THREE.TextureLoader();
+
+
+
+// ----------------------------------------------------
+// DEFAULT SKYBOX
+// ----------------------------------------------------
 
 textureLoader.load('RMSField.png', (bgTexture) => {
 
@@ -230,10 +245,16 @@ scene.add(ground);
 
 
 // ----------------------------------------------------
-// LOAD CAR MODEL (OBJ VERSION)
+// OBJ LOADER
 // ----------------------------------------------------
 
 const objLoader = new OBJLoader();
+
+
+
+// ----------------------------------------------------
+// LOAD CAR MODEL
+// ----------------------------------------------------
 
 let carModel;
 
@@ -245,9 +266,18 @@ objLoader.load(
 
     carModel = obj;
 
-    carModel.scale.set(1,1,1);
+    // IMPORTANT:
+    // OBJ models often need scale adjustments
 
-    carModel.position.set(0,0,0);
+    carModel.scale.set(0.05, 0.05, 0.05);
+
+    // Lift slightly above ground
+
+    carModel.position.set(0, 0.5, 0);
+
+    // OBJ models are often rotated weirdly
+
+    carModel.rotation.x = -Math.PI / 2;
 
     scene.add(carModel);
 
@@ -259,7 +289,7 @@ objLoader.load(
 
   (error) => {
 
-    console.error(error);
+    console.error("Car Error:", error);
 
   }
 
@@ -271,8 +301,6 @@ objLoader.load(
 // LOAD BUILDING MODEL
 // ----------------------------------------------------
 
-const objLoader = new OBJLoader();
-
 let buildingModel;
 
 objLoader.load(
@@ -283,9 +311,9 @@ objLoader.load(
 
     buildingModel = obj;
 
-    buildingModel.position.set(15,0,-15);
+    buildingModel.position.set(15, 0, -15);
 
-    buildingModel.scale.set(1,1,1);
+    buildingModel.scale.set(1, 1, 1);
 
     scene.add(buildingModel);
 
@@ -297,7 +325,7 @@ objLoader.load(
 
   (error) => {
 
-    console.error(error);
+    console.error("Building Error:", error);
 
   }
 
@@ -522,19 +550,19 @@ function animate() {
 
     if (keys['a']) {
 
-      carModel.rotation.y += 0.03;
+      carModel.rotation.z += 0.03;
 
     }
 
     if (keys['d']) {
 
-      carModel.rotation.y -= 0.03;
+      carModel.rotation.z -= 0.03;
 
     }
 
-    // MOVE
+    // MOVE FORWARD
 
-    carModel.translateZ(-speed);
+    carModel.translateY(speed);
 
   }
 
