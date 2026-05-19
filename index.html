@@ -168,15 +168,15 @@ scene.add(ground);
 
 
 // ----------------------------------------------------
-// CAR + WHEELS (FIXED PIVOT SYSTEM)
+// CAR + WHEELS
 // ----------------------------------------------------
 let carModel;
 
-let frontWheelPivot = null;
-let frontWheelMesh = null;
+let frontWheel = null;
+let rearWheel = null;
 
-let wheelSpin = 0;
 let wheelSteer = 0;
+let wheelSpin = 0;
 
 const maxWheelSteer = 0.6;
 
@@ -185,31 +185,18 @@ gltfLoader.load('Car.glb', (gltf) => {
   carModel = gltf.scene;
 
   carModel.scale.set(1, 1, 1);
-  carModel.position.set(0, 0, 0);
+  carModel.position.set(0, 0.5, 0);
 
-  // --- FIX: drop car onto ground properly ---
-  const box = new THREE.Box3().setFromObject(carModel);
-  carModel.position.y -= box.min.y;
-
-  // --- FIX: create proper wheel pivot ---
   carModel.traverse((child) => {
 
     if (child.name === "tire1_4") {
-
-      frontWheelMesh = child;
-
-      const pivot = new THREE.Group();
-      child.parent.add(pivot);
-
-      pivot.position.copy(child.position);
-
-      child.position.set(0, 0, 0);
-      pivot.add(child);
-
-      frontWheelPivot = pivot;
-
-      console.log("Front wheel pivot created");
+      frontWheel = child;
     }
+
+    if (child.name === "tire2_2") {
+      rearWheel = child;
+    }
+
   });
 
   scene.add(carModel);
@@ -252,14 +239,13 @@ window.addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
 
 
 // ----------------------------------------------------
-// MOUSE LOOK (FASTER)
+// MOUSE LOOK
 // ----------------------------------------------------
 let mouseDown = false;
 let yaw = 0;
 let pitch = 0;
 
 const sensitivity = 0.004;
-
 const minPitch = -0.8;
 const maxPitch = 0.35;
 
@@ -278,15 +264,13 @@ window.addEventListener('mousemove', (e) => {
 
 
 // ----------------------------------------------------
-// DRIVING PHYSICS
+// DRIVING
 // ----------------------------------------------------
 let speed = 0;
 const maxSpeed = 0.25;
 const acceleration = 0.006;
 const friction = 0.003;
 const turnSpeed = 0.04;
-
-const wheelSpinFactor = 0.12;
 
 
 // ----------------------------------------------------
@@ -320,12 +304,12 @@ function animate() {
     if (keys['a']) carModel.rotation.y += turnSpeed * speedFactor;
     if (keys['d']) carModel.rotation.y -= turnSpeed * speedFactor;
 
-    carModel.translateZ(-speed);
+    // FIXED DIRECTION (this is the important fix)
+    carModel.translateZ(speed);
 
-    // -----------------------------
-    // WHEEL STEERING + SPIN (FIXED)
-    // -----------------------------
-    if (frontWheelPivot) {
+
+    // WHEEL STEERING
+    if (frontWheel) {
 
       let targetSteer = 0;
 
@@ -333,16 +317,23 @@ function animate() {
       if (keys['d']) targetSteer = -maxWheelSteer;
 
       wheelSteer += (targetSteer - wheelSteer) * 0.2;
-
-      // steer pivot (correct axis)
-      frontWheelPivot.rotation.y = wheelSteer;
-
-      // spin actual wheel mesh
-      if (frontWheelMesh) {
-        wheelSpin += speed;
-        frontWheelMesh.rotation.x = wheelSpin * wheelSpinFactor;
-      }
+      frontWheel.rotation.y = wheelSteer;
     }
+
+
+    // WHEEL SPIN (FIXED DIRECTION)
+    const spinDelta = -speed * 10;
+
+    wheelSpin += spinDelta;
+
+    if (frontWheel) {
+      frontWheel.rotation.x = wheelSpin;
+    }
+
+    if (rearWheel) {
+      rearWheel.rotation.x = wheelSpin;
+    }
+
 
     // CAMERA FOLLOW
     const rot = new THREE.Euler(pitch, yaw, 0, 'YXZ');
@@ -352,6 +343,7 @@ function animate() {
     offset.applyQuaternion(carModel.quaternion);
 
     const desiredPos = carModel.position.clone().add(offset);
+
     camera.position.lerp(desiredPos, 0.1);
 
     const lookTarget = carModel.position.clone().add(lookOffset);
