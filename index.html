@@ -191,7 +191,8 @@ function makeWheelPivot(wheel) {
 gltfLoader.load('Car.glb', (gltf) => {
   carModel = gltf.scene;
   carModel.scale.set(1, 1, 1);
-  carModel.position.set(0, 0, 0);
+  // Spawn at the center of the BeginTrack piece (X: -67.5 to -40.5, Z: -10.36 to 10.36)
+  carModel.position.set(-54, 0, 0);
 
   // Ground-align: shift up so the bottom of the bounding box is at y=0
   const box = new THREE.Box3().setFromObject(carModel);
@@ -242,70 +243,123 @@ gltfLoader.load('Car.glb', (gltf) => {
 });
 
 // ─── COLLISION ───────────────────────────────────────────
-// obstacleBoxes: array of Box3 (world space) rebuilt each frame for any
-// model that has been registered. Works for the building and any future
-// racetrack GLB — just push the loaded scene into collisionModels.
-const collisionModels = [];   // models whose meshes form collision boxes
-const obstacleBoxes   = [];   // flat list of Box3, one per mesh, rebuilt each frame
-const _carBox         = new THREE.Box3();
-const _meshBox        = new THREE.Box3();
+//
+// Two systems running in parallel:
+//   1. AABB — used for the building (simple box shape, works well)
+//   2. Raycasting — used for the track walls (irregular mesh, AABB useless)
+//
+// Raycasting approach: every frame we cast several rays outward from the car
+// centre in the car's forward, back, left, right, and diagonal directions.
+// If any ray hits the wall mesh within a threshold distance, we push the car
+// back along the hit normal and bounce its speed.
 
-// Call after loading any model that should block the car.
-function registerCollisionModel(model) {
-  collisionModels.push(model);
-}
+// ── AABB (building) ──────────────────────────────────────
+const aabbObstacles = [];   // Box3 list, rebuilt each frame from aabbModels
+const aabbModels    = [];
+const _carBox       = new THREE.Box3();
+const _meshBox      = new THREE.Box3();
 
-// Rebuild all obstacle Box3s from current world transforms.
-// Called once per frame before the car moves.
-function updateObstacleBoxes() {
-  obstacleBoxes.length = 0;
-  for (const model of collisionModels) {
+function registerAabbModel(model) { aabbModels.push(model); }
+
+function updateAabbObstacles() {
+  aabbObstacles.length = 0;
+  for (const model of aabbModels) {
     model.traverse((child) => {
       if (child.isMesh) {
         _meshBox.setFromObject(child);
-        obstacleBoxes.push(_meshBox.clone());
+        aabbObstacles.push(_meshBox.clone());
       }
     });
   }
 }
 
-// Check car AABB against all obstacle boxes.
-// If overlapping, push car back out and bounce speed.
-const BOUNCE = 0.4; // fraction of speed reflected back (0=stop dead, 1=full bounce)
-// How much to shrink the car's collision box on each side (in world units).
-// Car is 2.684 wide, 5.668 long. Inset trims it down to roughly the body.
-const CAR_INSET_X = 0.7;  // effective half-width  ~0.64 (matches visual body)
-const CAR_INSET_Z = 1.0;  // effective half-length ~1.83 (matches visual body)
+const BOUNCE      = 0.4;
+const CAR_INSET_X = 0.7;
+const CAR_INSET_Z = 1.0;
 
-function resolveCollisions() {
+function resolveAabb() {
   if (!carModel) return;
   _carBox.setFromObject(carModel);
-  // Shrink box to match visual body, excluding wheel overhang
-  _carBox.min.x += CAR_INSET_X;
-  _carBox.max.x -= CAR_INSET_X;
-  _carBox.min.z += CAR_INSET_Z;
-  _carBox.max.z -= CAR_INSET_Z;
+  _carBox.min.x += CAR_INSET_X; _carBox.max.x -= CAR_INSET_X;
+  _carBox.min.z += CAR_INSET_Z; _carBox.max.z -= CAR_INSET_Z;
 
-  for (const box of obstacleBoxes) {
+  for (const box of aabbObstacles) {
     if (!_carBox.intersectsBox(box)) continue;
-
-    // Compute overlap on each axis and push out along the shallowest one
     const overlapX = Math.min(_carBox.max.x - box.min.x, box.max.x - _carBox.min.x);
     const overlapZ = Math.min(_carBox.max.z - box.min.z, box.max.z - _carBox.min.z);
-
     if (overlapX < overlapZ) {
-      const dir = (_carBox.min.x + (_carBox.max.x - _carBox.min.x) / 2) < (box.min.x + (box.max.x - box.min.x) / 2) ? -1 : 1;
+      const dir = _carBox.getCenter(new THREE.Vector3()).x < box.getCenter(new THREE.Vector3()).x ? -1 : 1;
       carModel.position.x += dir * overlapX;
     } else {
-      const dir = (_carBox.min.z + (_carBox.max.z - _carBox.min.z) / 2) < (box.min.z + (box.max.z - box.min.z) / 2) ? -1 : 1;
+      const dir = _carBox.getCenter(new THREE.Vector3()).z < box.getCenter(new THREE.Vector3()).z ? -1 : 1;
       carModel.position.z += dir * overlapZ;
     }
+    speed = -speed * BOUNCE;
+    _carBox.setFromObject(carModel);
+    _carBox.min.x += CAR_INSET_X; _carBox.max.x -= CAR_INSET_X;
+    _carBox.min.z += CAR_INSET_Z; _carBox.max.z -= CAR_INSET_Z;
+  }
+}
 
-    // Bounce: reverse a fraction of speed
+// ── Raycasting (wall) ────────────────────────────────────
+// wallMeshes: the actual Three.js Mesh objects to raycast against.
+// Populated after Track.glb loads.
+const wallMeshes = [];
+const _raycaster = new THREE.Raycaster();
+
+// Ray directions in car-local space (XZ plane). We cast in 8 directions.
+const RAY_DIRS_LOCAL = [
+  new THREE.Vector3( 0,  0, -1),  // forward
+  new THREE.Vector3( 0,  0,  1),  // back
+  new THREE.Vector3(-1,  0,  0),  // left
+  new THREE.Vector3( 1,  0,  0),  // right
+  new THREE.Vector3(-0.707, 0, -0.707), // front-left
+  new THREE.Vector3( 0.707, 0, -0.707), // front-right
+  new THREE.Vector3(-0.707, 0,  0.707), // back-left
+  new THREE.Vector3( 0.707, 0,  0.707), // back-right
+];
+
+// How far (world units) a ray must reach a wall before we react.
+// Set to roughly half the car's diagonal plus a small buffer.
+const WALL_RAY_DIST = 2.0;
+
+// Origin offset: cast from slightly above ground so rays don't clip the floor.
+const RAY_ORIGIN_Y = 0.5;
+
+function resolveWallRaycasts() {
+  if (!carModel || wallMeshes.length === 0) return;
+
+  const carPos    = carModel.position.clone();
+  const carQuat   = carModel.quaternion;
+  const origin    = carPos.clone();
+  origin.y        = RAY_ORIGIN_Y;
+
+  for (const localDir of RAY_DIRS_LOCAL) {
+    // Transform direction from car local space to world space
+    const worldDir = localDir.clone().applyQuaternion(carQuat).normalize();
+
+    _raycaster.set(origin, worldDir);
+    _raycaster.far = WALL_RAY_DIST;
+
+    const hits = _raycaster.intersectObjects(wallMeshes, false);
+    if (hits.length === 0) continue;
+
+    const hit  = hits[0];
+    const dist = hit.distance;
+    const penetration = WALL_RAY_DIST - dist;
+
+    // Push car back along the hit face normal (projected onto XZ)
+    const normal = hit.face.normal.clone()
+      .transformDirection(hit.object.matrixWorld);
+    normal.y = 0;
+    if (normal.lengthSq() < 0.001) continue;
+    normal.normalize();
+
+    carModel.position.addScaledVector(normal, penetration);
     speed = -speed * BOUNCE;
 
-    // Re-compute carBox after push so subsequent boxes see correct position
-    _carBox.setFromObject(carModel);
+    // Only handle one hit per frame to avoid jitter
+    break;
   }
 }
 
@@ -318,38 +372,41 @@ gltfLoader.load('Tower.glb', (gltf) => {
     if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; }
   });
   scene.add(buildingModel);
-  registerCollisionModel(buildingModel);
+  registerAabbModel(buildingModel);
 });
 
 // ─── TRACK ───────────────────────────────────────────────
 let trackModel;
-let finishLineBox = null;  // Box3 of the Finishline mesh, checked for lap completion
-let hasLeftFinishLine = false;  // prevents repeated triggers while sitting on the line
+let finishLineBox     = null;
+let hasLeftFinishLine = false;
 
 gltfLoader.load('Track.glb', (gltf) => {
   trackModel = gltf.scene;
+
+  // The Track and Wall nodes have a 90-deg X rotation baked in.
+  // In local space the wall Z values are negative (-0.76 to -0.008),
+  // which after rotation become negative world Y (underground).
+  // Lifting the whole track by 0.76 brings the wall flush with Y=0.
+  trackModel.position.y = 0.76;
+
   trackModel.traverse((child) => {
-    if (child.isMesh) {
-      child.castShadow    = true;
-      child.receiveShadow = true;
-    }
+    if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; }
   });
   scene.add(trackModel);
   trackModel.updateMatrixWorld(true);
 
-  // Only the Wall node blocks the car — Track surface and Finishline do not
+  // Collect wall meshes for raycasting
   const wallNode = trackModel.getObjectByName('Wall');
   if (wallNode) {
-    // Wrap in a minimal model-like object registerCollisionModel expects
-    const wallOnly = { traverse: (fn) => wallNode.traverse(fn) };
-    registerCollisionModel(wallOnly);
+    wallNode.traverse((child) => {
+      if (child.isMesh) wallMeshes.push(child);
+    });
   }
 
-  // Store the finish line box for lap detection
+  // Finish line box for lap detection
   const finishNode = trackModel.getObjectByName('Finishline');
   if (finishNode) {
     finishLineBox = new THREE.Box3().setFromObject(finishNode);
-    // Expand it a little on Y so the car (which rides at y~0) intersects reliably
     finishLineBox.min.y -= 1;
     finishLineBox.max.y += 1;
   }
@@ -435,8 +492,9 @@ function animate() {
     carModel.translateZ(-speed);
 
     // ── Collisions ──────────────────────────────────────
-    updateObstacleBoxes();
-    resolveCollisions();
+    updateAabbObstacles();
+    resolveAabb();
+    resolveWallRaycasts();
 
     // ── Finish line ─────────────────────────────────────
     if (finishLineBox) {
