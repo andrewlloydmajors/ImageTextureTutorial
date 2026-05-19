@@ -486,6 +486,14 @@ gltfLoader.load('Track.glb', (gltf) => {
 
   trackModel = gltf.scene;
 
+  // AUTO LOAD TRACK TEXTURE
+  const trackTexture = textureLoader.load('Track.png');
+
+  trackTexture.flipY = false;
+
+  trackTexture.wrapS = THREE.RepeatWrapping;
+  trackTexture.wrapT = THREE.RepeatWrapping;
+
   trackModel.traverse((child) => {
 
     if (child.isMesh) {
@@ -493,12 +501,18 @@ gltfLoader.load('Track.glb', (gltf) => {
       child.castShadow = true;
       child.receiveShadow = true;
 
+      // APPLY TRACK TEXTURE
+      child.material.map = trackTexture;
+      child.material.needsUpdate = true;
+
     }
 
+    // FIND FINISH LINE OBJECT
     if (child.name === 'Finishline') {
 
       finishLine = child;
 
+      // invisible trigger plane
       finishLine.visible = false;
 
       console.log('Finish line found');
@@ -509,10 +523,10 @@ gltfLoader.load('Track.glb', (gltf) => {
 
   scene.add(trackModel);
 
+  // COLLISIONS
   registerCollisionModel(trackModel);
 
 });
-
 
 // ────────────────────────────────────────────────────────
 // TEXTURE HELPERS
