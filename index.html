@@ -326,30 +326,32 @@ const WALL_RAY_DIST = 2.0;
 // Origin offset: cast from slightly above ground so rays don't clip the floor.
 const RAY_ORIGIN_Y = 0.5;
 
+let _rayDebugFrame = 0;
 function resolveWallRaycasts() {
   if (!carModel || wallMeshes.length === 0) return;
 
-  const carPos    = carModel.position.clone();
-  const carQuat   = carModel.quaternion;
-  const origin    = carPos.clone();
-  origin.y        = RAY_ORIGIN_Y;
+  _rayDebugFrame++;
+  const doLog = _rayDebugFrame % 60 === 0; // log once per second
+
+  const carPos  = carModel.position.clone();
+  const carQuat = carModel.quaternion;
+  const origin  = carPos.clone();
+  origin.y      = RAY_ORIGIN_Y;
+
+  if (doLog) console.log('Car pos:', carPos, 'Wall meshes:', wallMeshes.length);
 
   for (const localDir of RAY_DIRS_LOCAL) {
-    // Transform direction from car local space to world space
     const worldDir = localDir.clone().applyQuaternion(carQuat).normalize();
-
     _raycaster.set(origin, worldDir);
     _raycaster.far = WALL_RAY_DIST;
 
     const hits = _raycaster.intersectObjects(wallMeshes, false);
+    if (doLog && hits.length > 0) console.log('  Ray hit:', hits[0].distance, hits[0].object.name);
     if (hits.length === 0) continue;
 
-    const hit  = hits[0];
-    const dist = hit.distance;
-    const penetration = WALL_RAY_DIST - dist;
-
-    // Push car back along the hit face normal (projected onto XZ)
-    const normal = hit.face.normal.clone()
+    const hit         = hits[0];
+    const penetration = WALL_RAY_DIST - hit.distance;
+    const normal      = hit.face.normal.clone()
       .transformDirection(hit.object.matrixWorld);
     normal.y = 0;
     if (normal.lengthSq() < 0.001) continue;
@@ -357,8 +359,6 @@ function resolveWallRaycasts() {
 
     carModel.position.addScaledVector(normal, penetration);
     speed = -speed * BOUNCE;
-
-    // Only handle one hit per frame to avoid jitter
     break;
   }
 }
@@ -399,8 +399,17 @@ gltfLoader.load('Track.glb', (gltf) => {
   const wallNode = trackModel.getObjectByName('Wall');
   if (wallNode) {
     wallNode.traverse((child) => {
-      if (child.isMesh) wallMeshes.push(child);
+      if (child.isMesh) {
+        wallMeshes.push(child);
+        console.log('Wall mesh found:', child.name, 'geometry vertices:', child.geometry.attributes.position.count);
+        console.log('  matrixWorld:', child.matrixWorld.elements);
+        const wb = new THREE.Box3().setFromObject(child);
+        console.log('  world box:', wb.min, wb.max);
+      }
     });
+    console.log('Total wall meshes:', wallMeshes.length);
+  } else {
+    console.warn('Wall node not found in Track.glb');
   }
 
   // Finish line box for lap detection
