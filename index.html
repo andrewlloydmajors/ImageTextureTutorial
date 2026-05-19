@@ -168,19 +168,42 @@ scene.add(ground);
 
 
 // ----------------------------------------------------
-// CAR SYSTEM
+// CAR + WHEELS
 // ----------------------------------------------------
 let carModel;
 
+// FRONT
 let frontWheelPivot = null;
+let frontWheelMesh = null;
+
+// BACK
+let backWheelPivot = null;
+let backWheelMesh = null;
+
 let wheelSpin = 0;
 let wheelSteer = 0;
 
-const rearWheels = [];
-const frontWheels = [];
-
 const maxWheelSteer = 0.6;
 const wheelSpinFactor = 0.12;
+
+
+// helper: safe pivot creation
+function makeWheelPivot(wheel) {
+
+  const pivot = new THREE.Group();
+
+  const parent = wheel.parent;
+
+  parent.add(pivot);
+
+  pivot.position.copy(wheel.position);
+
+  wheel.position.set(0, 0, 0);
+
+  pivot.add(wheel);
+
+  return pivot;
+}
 
 
 // ----------------------------------------------------
@@ -193,30 +216,24 @@ gltfLoader.load('Car.glb', (gltf) => {
   carModel.scale.set(1, 1, 1);
   carModel.position.set(0, 0, 0);
 
+  // ground align (safe)
   const box = new THREE.Box3().setFromObject(carModel);
   carModel.position.y -= box.min.y;
 
+
   carModel.traverse((child) => {
 
-    // FRONT WHEELS (pivoted steering)
+    // FRONT WHEEL
     if (child.name === "tire1_4") {
-
-      const pivot = new THREE.Group();
-      child.parent.add(pivot);
-
-      pivot.position.copy(child.position);
-
-      child.position.set(0, 0, 0);
-      pivot.add(child);
-
-      frontWheelPivot = pivot;
+      frontWheelMesh = child;
+      frontWheelPivot = makeWheelPivot(child);
     }
 
-    // REAR WHEELS (spin only)
-    if (child.name === "tire2_2" || child.name.toLowerCase().includes("tire2")) {
-      rearWheels.push(child);
+    // BACK WHEEL
+    if (child.name === "tire2_2") {
+      backWheelMesh = child;
+      backWheelPivot = makeWheelPivot(child);
     }
-
   });
 
   scene.add(carModel);
@@ -233,6 +250,21 @@ gltfLoader.load('Tower.glb', (gltf) => {
   buildingModel.position.set(15, 0, -15);
   scene.add(buildingModel);
 });
+
+
+// ----------------------------------------------------
+// TEXTURE HELPERS (UNCHANGED)
+// ----------------------------------------------------
+function applyTexture(model, texture) {
+  texture.flipY = false;
+
+  model.traverse((child) => {
+    if (child.isMesh) {
+      child.material.map = texture;
+      child.material.needsUpdate = true;
+    }
+  });
+}
 
 
 // ----------------------------------------------------
@@ -256,6 +288,7 @@ window.addEventListener('mousedown', () => mouseDown = true);
 window.addEventListener('mouseup', () => mouseDown = false);
 
 window.addEventListener('mousemove', (e) => {
+
   if (!mouseDown) return;
 
   yaw -= e.movementX * sensitivity;
@@ -266,7 +299,7 @@ window.addEventListener('mousemove', (e) => {
 
 
 // ----------------------------------------------------
-// PHYSICS
+// DRIVING
 // ----------------------------------------------------
 let speed = 0;
 const maxSpeed = 0.25;
@@ -291,7 +324,9 @@ function animate() {
 
   if (carModel) {
 
+    // -----------------------------
     // DRIVE
+    // -----------------------------
     if (keys['w']) speed += acceleration;
     else if (keys['s']) speed -= acceleration;
     else {
@@ -310,7 +345,7 @@ function animate() {
 
 
     // -----------------------------
-    // WHEEL STEERING
+    // FRONT WHEELS (STEER + SPIN)
     // -----------------------------
     if (frontWheelPivot) {
 
@@ -319,24 +354,23 @@ function animate() {
       if (keys['d']) target = -maxWheelSteer;
 
       wheelSteer += (target - wheelSteer) * 0.2;
+
       frontWheelPivot.rotation.y = wheelSteer;
+
+      // FIXED: spin direction corrected
+      if (frontWheelMesh) {
+        frontWheelMesh.rotation.x += speed * wheelSpinFactor;
+      }
     }
 
 
     // -----------------------------
-    // WHEEL SPIN (FIXED SIGN + ALL REAR WHEELS)
+    // BACK WHEELS (SPIN ONLY)
     // -----------------------------
-    wheelSpin -= speed; // FIX: correct direction once
+    if (backWheelPivot && backWheelMesh) {
 
-    const spin = wheelSpin * wheelSpinFactor;
-
-    if (frontWheelPivot) {
-      const wheel = frontWheelPivot.children[0];
-      if (wheel) wheel.rotation.x = spin;
-    }
-
-    for (const w of rearWheels) {
-      w.rotation.x = spin;
+      // same physics, no steering
+      backWheelMesh.rotation.x += speed * wheelSpinFactor;
     }
 
 
@@ -350,9 +384,11 @@ function animate() {
     offset.applyQuaternion(carModel.quaternion);
 
     const desiredPos = carModel.position.clone().add(offset);
+
     camera.position.lerp(desiredPos, 0.1);
 
     const lookTarget = carModel.position.clone().add(lookOffset);
+
     camera.lookAt(lookTarget);
   }
 
@@ -366,6 +402,7 @@ animate();
 // RESIZE
 // ----------------------------------------------------
 window.addEventListener('resize', () => {
+
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -378,27 +415,13 @@ window.addEventListener('resize', () => {
 document.getElementById('carTextureUpload').addEventListener('change', (e) => {
   if (!carModel) return;
   const url = URL.createObjectURL(e.target.files[0]);
-  textureLoader.load(url, (tex) => {
-    carModel.traverse(c => {
-      if (c.isMesh) {
-        c.material.map = tex;
-        c.material.needsUpdate = true;
-      }
-    });
-  });
+  textureLoader.load(url, (tex) => applyTexture(carModel, tex));
 });
 
 document.getElementById('buildingTextureUpload').addEventListener('change', (e) => {
   if (!buildingModel) return;
   const url = URL.createObjectURL(e.target.files[0]);
-  textureLoader.load(url, (tex) => {
-    buildingModel.traverse(c => {
-      if (c.isMesh) {
-        c.material.map = tex;
-        c.material.needsUpdate = true;
-      }
-    });
-  });
+  textureLoader.load(url, (tex) => applyTexture(buildingModel, tex));
 });
 
 document.getElementById('skyboxUpload').addEventListener('change', (e) => {
