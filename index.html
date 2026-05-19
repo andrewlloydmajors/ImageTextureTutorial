@@ -65,8 +65,9 @@ canvas { display: block; }
     A/D = Turn<br>
     Drag Mouse = Look Around
   </div>
-  <div id="lapDisplay" style="font-size:15px; font-weight:bold; color:#222; margin-top:4px;">
-    Lap: <span id="lapCount">0</span>
+  <div id="lapDisplay" style="font-size:13px; color:#222; margin-top:4px; line-height:1.8;">
+    <div>Current: <span id="currentLap">0:00.000</span></div>
+    <div>Best:&nbsp;&nbsp;&nbsp;&nbsp;<span id="bestLap">--:--.---</span></div>
   </div>
 </div>
 <script type="importmap">
@@ -476,9 +477,32 @@ const lookOffset = new THREE.Vector3(0, 1, 0);
 const _spinAxis = new THREE.Vector3(1, 0, 0);
 const _spinQ = new THREE.Quaternion();
 
-// ─── LAP COUNTER ─────────────────────────────────────────
-let lapCount = 0;
-const lapCountEl = document.getElementById('lapCount');
+// ─── LAP TIMER ───────────────────────────────────────────
+const currentLapEl = document.getElementById('currentLap');
+const bestLapEl    = document.getElementById('bestLap');
+
+let lapStartTime  = null;   // performance.now() when current lap began
+let bestLapMs     = null;   // best lap in milliseconds, null until first lap done
+
+// Checkpoint: a Box3 spanning the top straight, roughly opposite the finish line.
+// The car must pass through here before a finish-line crossing counts as a lap.
+const checkpointBox = new THREE.Box3(
+  new THREE.Vector3(-148, -2, 16),
+  new THREE.Vector3( -94,  4, 37)
+);
+let checkpointCleared = false;  // true once car has passed the checkpoint this lap
+
+function formatTime(ms) {
+  const m   = Math.floor(ms / 60000);
+  const s   = Math.floor((ms % 60000) / 1000);
+  const mil = Math.floor(ms % 1000);
+  return `${m}:${String(s).padStart(2,'0')}.${String(mil).padStart(3,'0')}`;
+}
+
+function updateLapTimer() {
+  if (lapStartTime === null) return;
+  currentLapEl.textContent = formatTime(performance.now() - lapStartTime);
+}
 
 // ─── ANIMATE ─────────────────────────────────────────────
 function animate() {
@@ -511,17 +535,42 @@ function animate() {
     resolveAabb();
     resolveWallRaycasts();
 
-    // ── Finish line ─────────────────────────────────────
-    if (finishLineBox) {
+    // ── Lap timer & checkpoint ───────────────────────────
+    if (finishLineBox || checkpointBox) {
       _carBox.setFromObject(carModel);
-      if (_carBox.intersectsBox(finishLineBox)) {
-        if (hasLeftFinishLine) {
-          lapCount++;
-          lapCountEl.textContent = lapCount;
-          hasLeftFinishLine = false;
+
+      // Start timer on first movement across the finish line
+      if (lapStartTime === null && finishLineBox && _carBox.intersectsBox(finishLineBox) && speed > 0) {
+        lapStartTime = performance.now();
+        hasLeftFinishLine = false;
+        checkpointCleared = false;
+      }
+
+      if (lapStartTime !== null) {
+        // Track checkpoint clearance
+        if (!checkpointCleared && _carBox.intersectsBox(checkpointBox)) {
+          checkpointCleared = true;
         }
-      } else {
-        hasLeftFinishLine = true;
+
+        // Finish line crossing: must have left it, cleared checkpoint, and be going forward
+        if (finishLineBox && _carBox.intersectsBox(finishLineBox)) {
+          if (hasLeftFinishLine && checkpointCleared && speed > 0) {
+            const lapMs = performance.now() - lapStartTime;
+            if (bestLapMs === null || lapMs < bestLapMs) {
+              bestLapMs = lapMs;
+              bestLapEl.textContent = formatTime(bestLapMs);
+              bestLapEl.style.color = '#007700';
+              setTimeout(() => bestLapEl.style.color = '#222', 1500);
+            }
+            lapStartTime      = performance.now();
+            hasLeftFinishLine = false;
+            checkpointCleared = false;
+          }
+        } else {
+          hasLeftFinishLine = true;
+        }
+
+        updateLapTimer();
       }
     }
 
