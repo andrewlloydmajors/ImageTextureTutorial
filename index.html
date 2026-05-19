@@ -197,9 +197,11 @@ gltfLoader.load('Car.glb', (gltf) => {
   carModel.position.set(-54, 0, 0);
   carModel.rotation.y = Math.PI / 2;
 
-  // Ground-align: shift up so the bottom of the bounding box is at y=0
+  // Ground-align: shift up so the bottom of the bounding box is at y=0,
+  // then add the track's Y offset (0.76) so the car sits on the track surface.
   const box = new THREE.Box3().setFromObject(carModel);
   carModel.position.y -= box.min.y;
+  carModel.position.y += 0.76;
 
   // Enable shadows on all car meshes
   carModel.traverse((child) => {
@@ -467,8 +469,8 @@ window.addEventListener('mousemove', (e) => {
 
 // ─── DRIVING PHYSICS ─────────────────────────────────────
 let speed        = 0;
-const maxSpeed      = 0.28;
-const acceleration  = 0.007;
+const maxSpeed      = 0.42;
+const acceleration  = 0.004;
 const friction      = 0.004;
 const turnSpeed     = 0.04;
 
