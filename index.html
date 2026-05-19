@@ -149,8 +149,8 @@ let backWheelPivot  = null; // tire2_2 - outer pivot for position
 let backWheelSpinner = null; // inner group - handles spin (quaternion)
 
 let wheelSteer = 0;
-const maxWheelSteer  = 0.5;
-const wheelSpinFactor = 0.15;
+const maxWheelSteer  = 0.3;
+const wheelSpinFactor = 0.4;
 
 // ─── PIVOT HELPER ────────────────────────────────────────
 // The wheel nodes both have translation=(0,0,0) in the GLTF — their geometry
@@ -328,7 +328,7 @@ function animate() {
       if (keys['a']) steerTarget =  maxWheelSteer;
       if (keys['d']) steerTarget = -maxWheelSteer;
 
-      wheelSteer += (steerTarget - wheelSteer) * 0.08;
+      wheelSteer += (steerTarget - wheelSteer) * 0.15;
       frontWheelPivot.rotation.y = wheelSteer;
 
       // Spin on the inner spinner, completely separate from steer pivot
