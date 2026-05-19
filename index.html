@@ -11,7 +11,6 @@ body {
   background: #000;
   font-family: Arial, sans-serif;
 }
-
 canvas { display: block; }
 
 #uiPanel {
@@ -27,14 +26,12 @@ canvas { display: block; }
   gap: 10px;
   max-width: 250px;
 }
-
 #uiPanel label {
   display: flex;
   flex-direction: column;
   font-size: 14px;
   gap: 4px;
 }
-
 #info {
   font-size: 13px;
   color: #333;
@@ -92,13 +89,11 @@ canvas { display: block; }
 import * as THREE from 'three';
 import { GLTFLoader } from './jsm/loaders/GLTFLoader.js';
 
-
 // ----------------------------------------------------
 // SCENE
 // ----------------------------------------------------
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0xbfd1e5, 80, 600);
-
 
 // ----------------------------------------------------
 // CAMERA
@@ -110,7 +105,6 @@ const camera = new THREE.PerspectiveCamera(
   3000
 );
 
-
 // ----------------------------------------------------
 // RENDERER
 // ----------------------------------------------------
@@ -119,17 +113,13 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 document.body.appendChild(renderer.domElement);
 
-
 // ----------------------------------------------------
 // LIGHTING
 // ----------------------------------------------------
-const ambientLight = new THREE.AmbientLight(0xffffff, 2);
-scene.add(ambientLight);
-
+scene.add(new THREE.AmbientLight(0xffffff, 2));
 const directionalLight = new THREE.DirectionalLight(0xffffff, 3);
 directionalLight.position.set(5, 10, 7);
 scene.add(directionalLight);
-
 
 // ----------------------------------------------------
 // LOADERS
@@ -137,16 +127,14 @@ scene.add(directionalLight);
 const textureLoader = new THREE.TextureLoader();
 const gltfLoader = new GLTFLoader();
 
-
 // ----------------------------------------------------
 // SKYBOX
 // ----------------------------------------------------
-textureLoader.load('RMSField.png', (bgTexture) => {
-  bgTexture.mapping = THREE.EquirectangularReflectionMapping;
-  scene.background = bgTexture;
-  scene.environment = bgTexture;
+textureLoader.load('RMSField.png', (tex) => {
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  scene.background = tex;
+  scene.environment = tex;
 });
-
 
 // ----------------------------------------------------
 // GROUND
@@ -156,29 +144,29 @@ grassTexture.wrapS = THREE.RepeatWrapping;
 grassTexture.wrapT = THREE.RepeatWrapping;
 grassTexture.repeat.set(300, 300);
 
-const groundMaterial = new THREE.MeshStandardMaterial({ map: grassTexture });
-
 const ground = new THREE.Mesh(
   new THREE.PlaneGeometry(6000, 6000),
-  groundMaterial
+  new THREE.MeshStandardMaterial({ map: grassTexture })
 );
 
 ground.rotation.x = -Math.PI / 2;
 scene.add(ground);
 
-
 // ----------------------------------------------------
-// CAR + WHEELS
+// CAR + WHEELS (FIXED PIVOTS)
 // ----------------------------------------------------
 let carModel;
 
-let frontWheel = null;
-let rearWheel = null;
+let frontWheelMesh = null;
+let rearWheelMesh = null;
+
+let frontWheelPivot = null;
+let rearWheelPivot = null;
 
 let wheelSteer = 0;
 let wheelSpin = 0;
 
-const maxWheelSteer = 0.6;
+const maxSteer = 0.6;
 
 gltfLoader.load('Car.glb', (gltf) => {
 
@@ -190,18 +178,43 @@ gltfLoader.load('Car.glb', (gltf) => {
   carModel.traverse((child) => {
 
     if (child.name === "tire1_4") {
-      frontWheel = child;
+      frontWheelMesh = child;
     }
 
     if (child.name === "tire2_2") {
-      rearWheel = child;
+      rearWheelMesh = child;
     }
 
   });
 
+  // ---- FIX: create pivots so rotation is correct ----
+  function makePivot(wheelMesh) {
+
+    if (!wheelMesh) return null;
+
+    const pivot = new THREE.Object3D();
+
+    // keep world position
+    wheelMesh.getWorldPosition(pivot.position);
+
+    // detach from car and attach to pivot
+    wheelMesh.parent.attach(pivot);
+    pivot.add(wheelMesh);
+
+    // reset local position so it spins correctly
+    wheelMesh.position.set(0, 0, 0);
+
+    return pivot;
+  }
+
+  frontWheelPivot = makePivot(frontWheelMesh);
+  rearWheelPivot = makePivot(rearWheelMesh);
+
+  if (frontWheelPivot) carModel.add(frontWheelPivot);
+  if (rearWheelPivot) carModel.add(rearWheelPivot);
+
   scene.add(carModel);
 });
-
 
 // ----------------------------------------------------
 // BUILDING
@@ -214,29 +227,12 @@ gltfLoader.load('Tower.glb', (gltf) => {
   scene.add(buildingModel);
 });
 
-
-// ----------------------------------------------------
-// TEXTURE HELPERS
-// ----------------------------------------------------
-function applyTexture(model, texture) {
-  texture.flipY = false;
-
-  model.traverse((child) => {
-    if (child.isMesh) {
-      child.material.map = texture;
-      child.material.needsUpdate = true;
-    }
-  });
-}
-
-
 // ----------------------------------------------------
 // INPUT
 // ----------------------------------------------------
 const keys = {};
 window.addEventListener('keydown', (e) => keys[e.key.toLowerCase()] = true);
 window.addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
-
 
 // ----------------------------------------------------
 // MOUSE LOOK
@@ -246,39 +242,30 @@ let yaw = 0;
 let pitch = 0;
 
 const sensitivity = 0.004;
-const minPitch = -0.8;
-const maxPitch = 0.35;
 
 window.addEventListener('mousedown', () => mouseDown = true);
 window.addEventListener('mouseup', () => mouseDown = false);
 
 window.addEventListener('mousemove', (e) => {
-
   if (!mouseDown) return;
-
   yaw -= e.movementX * sensitivity;
   pitch -= e.movementY * sensitivity;
-
-  pitch = Math.max(minPitch, Math.min(maxPitch, pitch));
 });
 
-
 // ----------------------------------------------------
-// DRIVING
+// PHYSICS
 // ----------------------------------------------------
 let speed = 0;
 const maxSpeed = 0.25;
-const acceleration = 0.006;
+const accel = 0.006;
 const friction = 0.003;
 const turnSpeed = 0.04;
 
-
 // ----------------------------------------------------
-// CAMERA OFFSETS
+// CAMERA OFFSET
 // ----------------------------------------------------
 const baseOffset = new THREE.Vector3(0, 3, 8);
 const lookOffset = new THREE.Vector3(0, 1, 0);
-
 
 // ----------------------------------------------------
 // LOOP
@@ -290,71 +277,62 @@ function animate() {
   if (carModel) {
 
     // DRIVE
-    if (keys['w']) speed += acceleration;
-    else if (keys['s']) speed -= acceleration;
+    if (keys['w']) speed += accel;
+    else if (keys['s']) speed -= accel;
     else {
       if (speed > 0) speed -= friction;
       if (speed < 0) speed += friction;
     }
 
-    speed = Math.max(-maxSpeed, Math.min(maxSpeed, speed));
+    speed = THREE.MathUtils.clamp(speed, -maxSpeed, maxSpeed);
 
-    const speedFactor = Math.min(Math.abs(speed) / maxSpeed, 1);
+    const speedFactor = Math.abs(speed) / maxSpeed;
 
     if (keys['a']) carModel.rotation.y += turnSpeed * speedFactor;
     if (keys['d']) carModel.rotation.y -= turnSpeed * speedFactor;
 
-    // FIXED DIRECTION (this is the important fix)
     carModel.translateZ(speed);
 
-
+    // ------------------------------------------------
     // WHEEL STEERING
-    if (frontWheel) {
+    // ------------------------------------------------
+    if (frontWheelPivot) {
+      let target = 0;
+      if (keys['a']) target = maxSteer;
+      if (keys['d']) target = -maxSteer;
 
-      let targetSteer = 0;
-
-      if (keys['a']) targetSteer = maxWheelSteer;
-      if (keys['d']) targetSteer = -maxWheelSteer;
-
-      wheelSteer += (targetSteer - wheelSteer) * 0.2;
-      frontWheel.rotation.y = wheelSteer;
+      wheelSteer += (target - wheelSteer) * 0.2;
+      frontWheelPivot.rotation.y = wheelSteer;
     }
 
+    // ------------------------------------------------
+    // WHEEL SPIN (FIXED DIRECTION + BOTH AXLES)
+    // ------------------------------------------------
+    wheelSpin += speed * 10;
 
-    // WHEEL SPIN (FIXED DIRECTION)
-    const spinDelta = -speed * 10;
+    if (frontWheelPivot) frontWheelPivot.rotation.x = wheelSpin;
+    if (rearWheelPivot) rearWheelPivot.rotation.x = wheelSpin;
 
-    wheelSpin += spinDelta;
-
-    if (frontWheel) {
-      frontWheel.rotation.x = wheelSpin;
-    }
-
-    if (rearWheel) {
-      rearWheel.rotation.x = wheelSpin;
-    }
-
-
+    // ------------------------------------------------
     // CAMERA FOLLOW
+    // ------------------------------------------------
     const rot = new THREE.Euler(pitch, yaw, 0, 'YXZ');
 
     const offset = baseOffset.clone();
     offset.applyEuler(rot);
     offset.applyQuaternion(carModel.quaternion);
 
-    const desiredPos = carModel.position.clone().add(offset);
+    const desired = carModel.position.clone().add(offset);
+    camera.position.lerp(desired, 0.1);
 
-    camera.position.lerp(desiredPos, 0.1);
-
-    const lookTarget = carModel.position.clone().add(lookOffset);
-    camera.lookAt(lookTarget);
+    const look = carModel.position.clone().add(lookOffset);
+    camera.lookAt(look);
   }
 
   renderer.render(scene, camera);
 }
 
 animate();
-
 
 // ----------------------------------------------------
 // RESIZE
@@ -363,47 +341,6 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
-});
-
-
-// ----------------------------------------------------
-// TEXTURE UPLOADS
-// ----------------------------------------------------
-document.getElementById('carTextureUpload').addEventListener('change', (e) => {
-  if (!carModel) return;
-  const url = URL.createObjectURL(e.target.files[0]);
-  textureLoader.load(url, (tex) => applyTexture(carModel, tex));
-});
-
-document.getElementById('buildingTextureUpload').addEventListener('change', (e) => {
-  if (!buildingModel) return;
-  const url = URL.createObjectURL(e.target.files[0]);
-  textureLoader.load(url, (tex) => applyTexture(buildingModel, tex));
-});
-
-document.getElementById('skyboxUpload').addEventListener('change', (e) => {
-  const url = URL.createObjectURL(e.target.files[0]);
-  textureLoader.load(url, (tex) => {
-    tex.mapping = THREE.EquirectangularReflectionMapping;
-    scene.background = tex;
-    scene.environment = tex;
-  });
-});
-
-document.getElementById('groundUpload').addEventListener('change', (e) => {
-  const url = URL.createObjectURL(e.target.files[0]);
-  textureLoader.load(url, (tex) => {
-    tex.wrapS = THREE.RepeatWrapping;
-    tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(300, 300);
-
-    groundMaterial.map = tex;
-    groundMaterial.needsUpdate = true;
-  });
-});
-
-document.getElementById('lightColor').addEventListener('input', (e) => {
-  directionalLight.color.set(e.target.value);
 });
 
 </script>
