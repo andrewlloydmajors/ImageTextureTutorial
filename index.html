@@ -105,7 +105,6 @@ canvas {
 
 import * as THREE from 'three';
 
-import { OrbitControls } from './jsm/controls/OrbitControls.js';
 import { GLTFLoader } from './jsm/loaders/GLTFLoader.js';
 
 
@@ -152,32 +151,14 @@ document.body.appendChild(renderer.domElement);
 
 
 // ----------------------------------------------------
-// CONTROLS
-// ----------------------------------------------------
-
-const controls = new OrbitControls(camera, renderer.domElement);
-
-controls.target.set(0, 1, 0);
-
-controls.minDistance = 3;
-controls.maxDistance = 12;
-
-controls.update();
-
-
-
-// ----------------------------------------------------
 // LIGHTING
 // ----------------------------------------------------
 
 const ambientLight = new THREE.AmbientLight(0xffffff, 2);
-
 scene.add(ambientLight);
 
 const directionalLight = new THREE.DirectionalLight(0xffffff, 3);
-
 directionalLight.position.set(5, 10, 7);
-
 scene.add(directionalLight);
 
 
@@ -214,10 +195,7 @@ const grassTexture = textureLoader.load('RMSgrass.png');
 
 grassTexture.wrapS = THREE.RepeatWrapping;
 grassTexture.wrapT = THREE.RepeatWrapping;
-
 grassTexture.repeat.set(300, 300);
-
-grassTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
 
 const groundMaterial = new THREE.MeshStandardMaterial({
   map: grassTexture
@@ -229,60 +207,44 @@ const ground = new THREE.Mesh(
 );
 
 ground.rotation.x = -Math.PI / 2;
-
 scene.add(ground);
 
 
 
 // ----------------------------------------------------
-// CAR (GLB)
+// CAR
 // ----------------------------------------------------
 
 let carModel;
 
-gltfLoader.load(
-  'Car.glb',
-  (gltf) => {
+gltfLoader.load('Car.glb', (gltf) => {
 
-    carModel = gltf.scene;
+  carModel = gltf.scene;
 
-    carModel.scale.set(1, 1, 1);
-    carModel.position.set(0, 0.5, 0);
+  carModel.scale.set(1, 1, 1);
+  carModel.position.set(0, 0.5, 0);
 
-    scene.add(carModel);
+  scene.add(carModel);
 
-    console.log("Car Loaded");
-
-  },
-  undefined,
-  (error) => console.error(error)
-);
+});
 
 
 
 // ----------------------------------------------------
-// BUILDING (GLB)
+// BUILDING
 // ----------------------------------------------------
 
 let buildingModel;
 
-gltfLoader.load(
-  'Tower.glb',
-  (gltf) => {
+gltfLoader.load('Tower.glb', (gltf) => {
 
-    buildingModel = gltf.scene;
+  buildingModel = gltf.scene;
 
-    buildingModel.position.set(15, 0, -15);
-    buildingModel.scale.set(1, 1, 1);
+  buildingModel.position.set(15, 0, -15);
 
-    scene.add(buildingModel);
+  scene.add(buildingModel);
 
-    console.log("Building Loaded");
-
-  },
-  undefined,
-  (error) => console.error(error)
-);
+});
 
 
 
@@ -310,107 +272,75 @@ function applyTexture(model, texture) {
 
 
 // ----------------------------------------------------
-// CAR TEXTURE
+// INPUT
 // ----------------------------------------------------
 
-document.getElementById('carTextureUpload')
-.addEventListener('change', (e) => {
+const keys = {};
 
-  if (!carModel) return;
-
-  const file = e.target.files[0];
-  const url = URL.createObjectURL(file);
-
-  textureLoader.load(url, (tex) => {
-    applyTexture(carModel, tex);
-  });
-
-});
+window.addEventListener('keydown', (e) => keys[e.key.toLowerCase()] = true);
+window.addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
 
 
 
 // ----------------------------------------------------
-// BUILDING TEXTURE
+// MOVEMENT
 // ----------------------------------------------------
 
-document.getElementById('buildingTextureUpload')
-.addEventListener('change', (e) => {
-
-  if (!buildingModel) return;
-
-  const file = e.target.files[0];
-  const url = URL.createObjectURL(file);
-
-  textureLoader.load(url, (tex) => {
-    applyTexture(buildingModel, tex);
-  });
-
-});
+let speed = 0;
 
 
 
 // ----------------------------------------------------
-// SKYBOX UPLOAD
+// CAMERA FOLLOW SETTINGS
 // ----------------------------------------------------
 
-document.getElementById('skyboxUpload')
-.addEventListener('change', (e) => {
-
-  const file = e.target.files[0];
-  if (!file) return;
-
-  const url = URL.createObjectURL(file);
-
-  textureLoader.load(url, (tex) => {
-
-    tex.mapping = THREE.EquirectangularReflectionMapping;
-
-    scene.background = tex;
-    scene.environment = tex;
-
-  });
-
-});
+const cameraOffset = new THREE.Vector3(0, 3, 8);
+const lookOffset = new THREE.Vector3(0, 1, 0);
 
 
 
 // ----------------------------------------------------
-// GROUND TEXTURE
+// ANIMATE
 // ----------------------------------------------------
 
-document.getElementById('groundUpload')
-.addEventListener('change', (e) => {
+function animate() {
 
-  const file = e.target.files[0];
-  if (!file) return;
+  requestAnimationFrame(animate);
 
-  const url = URL.createObjectURL(file);
+  if (carModel) {
 
-  textureLoader.load(url, (tex) => {
+    // movement
+    if (keys['w']) speed = 0.08;
+    else if (keys['s']) speed = -0.05;
+    else speed = 0;
 
-    tex.wrapS = THREE.RepeatWrapping;
-    tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(300, 300);
+    if (keys['a']) carModel.rotation.y += 0.03;
+    if (keys['d']) carModel.rotation.y -= 0.03;
 
-    groundMaterial.map = tex;
-    groundMaterial.needsUpdate = true;
-
-  });
-
-});
+    carModel.translateZ(-speed);
 
 
 
-// ----------------------------------------------------
-// LIGHT COLOR
-// ----------------------------------------------------
+    // -----------------------------
+    // CAMERA FOLLOW (3rd PERSON)
+    // -----------------------------
 
-document.getElementById('lightColor')
-.addEventListener('input', (e) => {
+    const offset = cameraOffset.clone();
+    offset.applyQuaternion(carModel.quaternion);
 
-  directionalLight.color.set(e.target.value);
+    const desiredPos = carModel.position.clone().add(offset);
 
-});
+    camera.position.lerp(desiredPos, 0.08);
+
+    const lookTarget = carModel.position.clone().add(lookOffset);
+    camera.lookAt(lookTarget);
+  }
+
+  renderer.render(scene, camera);
+
+}
+
+animate();
 
 
 
@@ -429,48 +359,66 @@ window.addEventListener('resize', () => {
 
 
 // ----------------------------------------------------
-// INPUT
+// TEXTURE UPLOADS
 // ----------------------------------------------------
 
-const keys = {};
+document.getElementById('carTextureUpload').addEventListener('change', (e) => {
 
-window.addEventListener('keydown', (e) => {
-  keys[e.key.toLowerCase()] = true;
+  if (!carModel) return;
+
+  const url = URL.createObjectURL(e.target.files[0]);
+
+  textureLoader.load(url, (tex) => applyTexture(carModel, tex));
+
 });
 
-window.addEventListener('keyup', (e) => {
-  keys[e.key.toLowerCase()] = false;
+document.getElementById('buildingTextureUpload').addEventListener('change', (e) => {
+
+  if (!buildingModel) return;
+
+  const url = URL.createObjectURL(e.target.files[0]);
+
+  textureLoader.load(url, (tex) => applyTexture(buildingModel, tex));
+
 });
 
+document.getElementById('skyboxUpload').addEventListener('change', (e) => {
 
+  const url = URL.createObjectURL(e.target.files[0]);
 
-// ----------------------------------------------------
-// MOVEMENT
-// ----------------------------------------------------
+  textureLoader.load(url, (tex) => {
 
-let speed = 0;
+    tex.mapping = THREE.EquirectangularReflectionMapping;
 
-function animate() {
+    scene.background = tex;
+    scene.environment = tex;
 
-  requestAnimationFrame(animate);
+  });
 
-  if (carModel) {
+});
 
-    if (keys['w']) speed = 0.08;
-    else if (keys['s']) speed = -0.05;
-    else speed = 0;
+document.getElementById('groundUpload').addEventListener('change', (e) => {
 
-    if (keys['a']) carModel.rotation.y += 0.03;
-    if (keys['d']) carModel.rotation.y -= 0.03;
+  const url = URL.createObjectURL(e.target.files[0]);
 
-    carModel.translateZ(speed);
-  }
+  textureLoader.load(url, (tex) => {
 
-  renderer.render(scene, camera);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(300, 300);
 
-}
+    groundMaterial.map = tex;
+    groundMaterial.needsUpdate = true;
 
-animate();
+  });
+
+});
+
+document.getElementById('lightColor').addEventListener('input', (e) => {
+
+  directionalLight.color.set(e.target.value);
+
+});
 
 </script>
 
