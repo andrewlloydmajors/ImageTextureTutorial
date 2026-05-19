@@ -383,14 +383,14 @@ function resolveWallRaycasts() {
 
     if (impactRatio < 0.5) {
       // ── Glancing hit ── keep speed, rotate car away, tiny speed loss
-      speed *= (1.0 - impactRatio * 0.3);
+      speed *= (1.0 - impactRatio * 0.6);
       lateralVel.set(0, 0, 0);
       const reflectAngle = impactRatio * 1.4;
       const wallSide     = facingDir.clone().cross(wallNormal).y;
       carModel.rotation.y += reflectAngle * Math.sign(wallSide);
     } else {
       // ── Direct hit ── bounce back, speed loss scales with directness
-      const retention = 1.0 - (impactRatio - 0.5) * 0.8;
+      const retention = (1.0 - (impactRatio - 0.5) * 0.8) * 0.25;
       speed = -speed * Math.max(0, retention);
       lateralVel.set(0, 0, 0);
     }
