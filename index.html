@@ -142,10 +142,10 @@ let carModel = null;
 
 // The GLB has three flat sibling nodes: body_3, tire1_4, tire2_2
 // We wrap each wheel in a pivot group AFTER the full load is done.
-let frontWheelPivot = null; // tire1_4
+let frontWheelPivot = null; // tire1_4 - handles steering (rotation.y only)
+let frontWheelSpinner = null; // inner group - handles spin (quaternion)
 let frontWheelMesh  = null;
-let backWheelPivot  = null; // tire2_2
-let backWheelMesh   = null;
+let backWheelPivot  = null; // tire2_2 - handles spin (quaternion)
 
 let wheelSteer = 0;
 const maxWheelSteer  = 0.5;
@@ -216,6 +216,12 @@ gltfLoader.load('Car.glb', (gltf) => {
   if (tireFront) {
     frontWheelMesh  = tireFront;
     frontWheelPivot = makeWheelPivot(tireFront);
+    // Wrap the mesh in an inner spinner so steer (pivot.rotation.y) and
+    // spin (spinner quaternion) never touch the same object's rotation.
+    frontWheelSpinner = new THREE.Group();
+    frontWheelPivot.add(frontWheelSpinner);
+    frontWheelPivot.remove(tireFront);
+    frontWheelSpinner.add(tireFront);
   } else {
     console.warn('Front wheel node "tire1_4" not found in GLB.');
   }
@@ -321,11 +327,9 @@ function animate() {
       wheelSteer += (steerTarget - wheelSteer) * 0.15;
       frontWheelPivot.rotation.y = wheelSteer;
 
-      // Spin pivot around world X via quaternion to avoid gimbal with baked rotation
+      // Spin on the inner spinner, completely separate from steer pivot
       _spinQ.setFromAxisAngle(_spinAxis, -speed * wheelSpinFactor);
-      frontWheelPivot.quaternion.premultiply(_spinQ);
-      // Re-apply steer on top
-      frontWheelPivot.rotation.y = wheelSteer;
+      frontWheelSpinner.quaternion.premultiply(_spinQ);
     }
 
     // ── Back wheel: spin only ───────────────────────────
