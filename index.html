@@ -58,7 +58,7 @@ canvas { display: block; }
     <input type="file" id="groundUpload">
   </label>
   <label>Sunlight Color
-    <input type="color" id="lightColor" value="#aaaaaa">
+    <input type="color" id="lightColor" value="#ffffff">
   </label>
   <div id="info">
     W/S = Drive<br>
@@ -103,7 +103,7 @@ document.body.appendChild(renderer.domElement);
 const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
 scene.add(ambientLight);
 
-const directionalLight = new THREE.DirectionalLight(0xaaaaaa, 3);
+const directionalLight = new THREE.DirectionalLight(0xffffff, 3);
 directionalLight.position.set(30, 60, 40);
 directionalLight.castShadow = true;
 directionalLight.shadow.mapSize.set(2048, 2048);
@@ -381,7 +381,8 @@ function resolveWallRaycasts() {
 let buildingModel;
 gltfLoader.load('Tower.glb', (gltf) => {
   buildingModel = gltf.scene;
-  buildingModel.position.set(15, 0, -15);
+  buildingModel.position.set(-60, 0, -40);
+  buildingModel.scale.set(1.8, 1.8, 1.8);
   buildingModel.traverse((child) => {
     if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; }
   });
