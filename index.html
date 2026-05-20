@@ -389,9 +389,15 @@ function resolveWallRaycasts() {
       const wallSide     = facingDir.clone().cross(wallNormal).y;
       carModel.rotation.y += reflectAngle * Math.sign(wallSide);
     } else {
-      // ── Direct hit ── bounce back, speed loss scales with directness
+      // ── Direct hit ── bounce back, speed loss scales with directness,
+      // and rotate car away from the wall so W always finds a way out.
       const retention = (1.0 - (impactRatio - 0.5) * 0.8) * 0.25;
       speed = -speed * Math.max(0, retention);
+      const deflectAngle = (impactRatio - 0.5) * 0.6;
+      const wallSide = facingDir.clone().cross(wallNormal).y;
+      // If nearly dead-on (wallSide ~0), pick a consistent direction
+      const side = Math.abs(wallSide) > 0.01 ? Math.sign(wallSide) : 1;
+      carModel.rotation.y += deflectAngle * side;
       lateralVel.set(0, 0, 0);
     }
 
