@@ -212,6 +212,7 @@ gltfLoader.load('Car.glb', (gltf) => {
   });
 
   scene.add(carModel);
+  smoothedCarPos.copy(carModel.position);
 
   // Force Three.js to compute all world matrices now, before we call
   // worldToLocal / Box3.setFromObject. Without this, matrices are stale
@@ -521,6 +522,9 @@ const DRIFT_FRICTION    = 0.0015; // small speed cost while drifting
 // ─── CAMERA OFFSETS ──────────────────────────────────────
 const baseOffset = new THREE.Vector3(0, 3, 8);
 const lookOffset = new THREE.Vector3(0, 1, 0);
+// Smoothed car position that the camera follows — lags slightly behind the real
+// car position so sudden jumps from wall impacts don't snap the camera.
+const smoothedCarPos = new THREE.Vector3();
 
 // Quaternion for spinning wheels: we rotate the pivot around world X each frame.
 // Using quaternion multiply avoids gimbal issues from the baked 90-deg mesh rotation.
@@ -698,10 +702,12 @@ function animate() {
     }
 
     // ── Camera follow ───────────────────────────────────
-    const rot = new THREE.Euler(pitch, yaw, 0, 'YXZ');
+    // Smooth the car position separately so wall impact jumps don't jar the camera.
+    smoothedCarPos.lerp(carModel.position, 0.15);
+    const rot    = new THREE.Euler(pitch, yaw, 0, 'YXZ');
     const offset = baseOffset.clone().applyEuler(rot).applyQuaternion(carModel.quaternion);
-    camera.position.lerp(carModel.position.clone().add(offset), 0.1);
-    camera.lookAt(carModel.position.clone().add(lookOffset));
+    camera.position.lerp(smoothedCarPos.clone().add(offset), 0.12);
+    camera.lookAt(smoothedCarPos.clone().add(lookOffset));
   }
 
   renderer.render(scene, camera);
