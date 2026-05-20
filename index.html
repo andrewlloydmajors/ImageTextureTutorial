@@ -393,7 +393,7 @@ function resolveWallRaycasts() {
       // and rotate car away from the wall so W always finds a way out.
       const retention = (1.0 - (impactRatio - 0.5) * 0.8) * 0.25;
       speed = -speed * Math.max(0, retention);
-      const deflectAngle = (impactRatio - 0.5) * 1.0;
+      const deflectAngle = (impactRatio - 0.5) * 1.8;
       const wallSide = facingDir.clone().cross(wallNormal).y;
       const side = Math.abs(wallSide) > 0.01 ? Math.sign(wallSide) : 1;
       carModel.rotation.y += deflectAngle * side;
