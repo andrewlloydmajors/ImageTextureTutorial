@@ -397,7 +397,7 @@ function resolveWallRaycasts() {
       const wallSide = facingDir.clone().cross(wallNormal).y;
       // If nearly dead-on (wallSide ~0), pick a consistent direction
       const side = Math.abs(wallSide) > 0.01 ? Math.sign(wallSide) : 1;
-      carModel.rotation.y += deflectAngle * side;
+      carModel.rotation.y -= deflectAngle * side;
       lateralVel.set(0, 0, 0);
     }
 
