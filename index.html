@@ -523,7 +523,26 @@ scene.fog   = new THREE.Fog(0xbfd1e5, 80, 600);
 
 let carTextureApplied = false;
 let carTextureDataUrl = null;
+let pendingCarTextureUrl = null;  // holds URL if uploaded before car model finished loading
 const lockOverlay = document.getElementById('lockOverlay');
+
+function applyCarTexture(url) {
+  textureLoader.load(url, (tex) => {
+    applyTexture(carModel, tex);
+    if (!carTextureApplied) {
+      carTextureApplied = true;
+      lockOverlay.style.display = 'none';
+      initSound();
+    }
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas'); c.width = 128; c.height = 128;
+      c.getContext('2d').drawImage(img, 0, 0, 128, 128);
+      carTextureDataUrl = c.toDataURL('image/jpeg', 0.7);
+    };
+    img.src = url;
+  });
+}
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 3000);
 
@@ -622,6 +641,12 @@ gltfLoader.load('Car.glb', (gltf) => {
     backWheelPivot.add(backWheelSpinner);
     backWheelPivot.remove(tireBack);
     backWheelSpinner.add(tireBack);
+  }
+
+  // If the student uploaded a texture before the car finished loading, apply it now
+  if (pendingCarTextureUrl) {
+    applyCarTexture(pendingCarTextureUrl);
+    pendingCarTextureUrl = null;
   }
 });
 
@@ -1072,19 +1097,13 @@ window.addEventListener('resize',()=>{
 // TEXTURE UPLOADS
 // ═══════════════════════════════════════════════════════
 document.getElementById('carTextureUpload').addEventListener('change',(e)=>{
-  if(!carModel) return;
-  const file=e.target.files[0], url=URL.createObjectURL(file);
-  textureLoader.load(url,(tex)=>{
-    applyTexture(carModel,tex);
-    if(!carTextureApplied){ carTextureApplied=true; lockOverlay.style.display='none'; initSound(); }
-    const img=new Image();
-    img.onload=()=>{
-      const c=document.createElement('canvas'); c.width=128; c.height=128;
-      c.getContext('2d').drawImage(img,0,0,128,128);
-      carTextureDataUrl=c.toDataURL('image/jpeg',0.7);
-    };
-    img.src=url;
-  });
+  const url = URL.createObjectURL(e.target.files[0]);
+  if (!carModel) {
+    // Car GLB still loading — store the URL and apply once it's ready
+    pendingCarTextureUrl = url;
+  } else {
+    applyCarTexture(url);
+  }
 });
 document.getElementById('buildingTextureUpload').addEventListener('change',(e)=>{
   if(!buildingModel) return;
