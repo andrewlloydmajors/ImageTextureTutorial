@@ -396,7 +396,7 @@ canvas { display: block; }
     <img id="submitPreview" class="modal-preview" src="" alt="Your car">
     <div id="submitError" class="modal-error"></div>
     <input type="text"  id="submitName"  placeholder="Your name" maxlength="40">
-    <input type="email" id="submitEmail" placeholder="School email (must end in student.us)">
+    <input type="email" id="submitEmail" placeholder="School email">
     <div class="modal-btn-row">
       <button class="btn-secondary" id="submitCancel">Maybe later</button>
       <button class="btn-primary"   id="submitConfirm">Submit ✓</button>
@@ -1022,7 +1022,7 @@ document.getElementById('submitConfirm').addEventListener('click', async ()=>{
     emailErr.style.display='block'; return;
   }
   if(!email || !email.toLowerCase().endsWith('student.us')) {
-    emailErr.textContent = 'Email must be your school email ending in student.us.';
+    emailErr.textContent = 'Email must be your school email.';
     emailErr.style.display='block'; return;
   }
 
