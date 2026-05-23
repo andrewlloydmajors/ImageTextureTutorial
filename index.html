@@ -614,6 +614,8 @@ gltfLoader.load('Car.glb', (gltf) => {
   carModel.traverse((c) => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
   scene.add(carModel);
   smoothedCarPos.copy(carModel.position);
+  prevRenderPos.copy(carModel.position);
+  postPhysicsPos.copy(carModel.position);
   carModel.updateMatrixWorld(true);
   CAR_SPAWN_POS.y = carModel.position.y;
 
@@ -955,8 +957,14 @@ document.getElementById('submitConfirm').addEventListener('click', async ()=>{
 // Ghost frames are recorded once per physics tick, so playback
 // is also framerate-independent.
 const PHYSICS_STEP = 1000 / 60;   // 16.667 ms
-let   physicsAccum = 0;
-let   lastTime     = null;
+let   physicsAccum  = 0;
+let   lastTime      = null;
+// Persistent render-interpolation state — updated once per tick inside the loop
+const prevRenderPos = new THREE.Vector3();
+let   prevRenderYaw = Math.PI / 2;
+// Captures the true physics position after all ticks, before we overwrite
+// carModel.position with the interpolated render position
+const postPhysicsPos = new THREE.Vector3();
 
 function physicsTick() {
   // ── Acceleration & friction ────────────────────────
@@ -1017,28 +1025,18 @@ function physicsTick() {
   // ── Ghost recording (one frame per physics tick) ───
   if(lapStartTime !== null) {
     currentLapGhostFrames.push({
-      px:carModel.position.x, py:carModel.position.y, pz:carModel.position.z,
-      qx:carModel.quaternion.x, qy:carModel.quaternion.y,
-      qz:carModel.quaternion.z, qw:carModel.quaternion.w
+      px: carModel.position.x, py: carModel.position.y, pz: carModel.position.z,
+      ry: carYaw   // store yaw directly — simpler and no quaternion drift
     });
   }
 
-  // ── Ghost playback (one frame per physics tick) ────
-  if(pbGhostMesh) {
-    const show = ghostPBCheckbox.checked && pbGhostFrames.length > 0 && lapStartTime !== null;
-    pbGhostMesh.visible = show;
-    if(show) {
-      updateGhost(pbGhostMesh, pbGhostFrames, ghostPlaybackPBFrame);
-      ghostPlaybackPBFrame = Math.min(ghostPlaybackPBFrame + 1, pbGhostFrames.length - 1);
-    }
+  // Ghost playback index advances once per physics tick (correct timing)
+  // but the actual mesh position is set in the render loop with interpolation.
+  if(ghostPBCheckbox.checked && pbGhostFrames.length > 0 && lapStartTime !== null) {
+    ghostPlaybackPBFrame = Math.min(ghostPlaybackPBFrame + 1, pbGhostFrames.length - 1);
   }
-  if(crGhostMesh) {
-    const show = ghostCRCheckbox.checked && crGhostFrames.length > 0 && lapStartTime !== null;
-    crGhostMesh.visible = show;
-    if(show) {
-      updateGhost(crGhostMesh, crGhostFrames, ghostPlaybackCRFrame);
-      ghostPlaybackCRFrame = Math.min(ghostPlaybackCRFrame + 1, crGhostFrames.length - 1);
-    }
+  if(ghostCRCheckbox.checked && crGhostFrames.length > 0 && lapStartTime !== null) {
+    ghostPlaybackCRFrame = Math.min(ghostPlaybackCRFrame + 1, crGhostFrames.length - 1);
   }
 
   // ── Lap timer & checkpoint ─────────────────────────
@@ -1101,30 +1099,72 @@ function animate() {
   }
 
   if(carModel && carTextureApplied) {
-    // Record the pre-tick position for interpolation
-    const prevPos = carModel.position.clone();
-    const prevYaw = carYaw;
-
     // Run all due physics ticks
     while(physicsAccum >= PHYSICS_STEP) {
+      // Save state at the START of each tick — this becomes prevPos for
+      // the interpolation, always exactly one tick behind postPos.
+      // Storing it here (rather than before the loop) means we always
+      // interpolate across the LAST tick only, never a multi-tick gap.
+      prevRenderPos.copy(carModel.position);
+      prevRenderYaw = carYaw;
+
       physicsTick();
       physicsAccum -= PHYSICS_STEP;
     }
 
-    // Store the true post-tick state
-    const postPos = carModel.position.clone();
-    const postYaw = carYaw;
+    // Save the true post-tick position before we overwrite it for rendering
+    postPhysicsPos.copy(carModel.position);
 
-    // Interpolate position and yaw between the last two physics states.
-    // We only lerp position and the yaw angle — never touch the quaternion
-    // directly, which eliminates the Euler/quaternion round-trip drift.
-    const alpha      = physicsAccum / PHYSICS_STEP;
-    const renderPos  = prevPos.clone().lerp(postPos, alpha);
-    const renderYaw  = prevYaw + (postYaw - prevYaw) * alpha;
+    // alpha: fraction of one tick interval that has elapsed since the last tick.
+    // Interpolate between the state at the start of the last tick and now.
+    const alpha     = physicsAccum / PHYSICS_STEP;
+    const renderPos = prevRenderPos.clone().lerp(carModel.position, alpha);
+    const renderYaw = prevRenderYaw + (carYaw - prevRenderYaw) * alpha;
 
     // Apply interpolated transform to mesh for this render frame
     carModel.position.copy(renderPos);
     carModel.rotation.set(0, renderYaw, 0, 'YXZ');
+
+    // Ghost playback — interpolate between the frame before and after the current tick
+    // using the same alpha as the car so ghosts stay in sync
+    if(pbGhostMesh) {
+      const show = ghostPBCheckbox.checked && pbGhostFrames.length > 0 && lapStartTime !== null;
+      pbGhostMesh.visible = show;
+      if(show) {
+        const fi  = Math.max(0, ghostPlaybackPBFrame - 1);
+        const fi2 = ghostPlaybackPBFrame;
+        const fa  = pbGhostFrames[fi], fb = pbGhostFrames[fi2];
+        pbGhostMesh.position.set(
+          fa.px + (fb.px - fa.px) * alpha,
+          fa.py + (fb.py - fa.py) * alpha,
+          fa.pz + (fb.pz - fa.pz) * alpha
+        );
+        pbGhostMesh.rotation.set(0,
+          fa.ry !== undefined
+            ? fa.ry + (fb.ry - fa.ry) * alpha
+            : Math.atan2(2*(fb.qw*fb.qy), 1-2*(fb.qy*fb.qy)), // fallback for old frames
+          0, 'YXZ');
+      }
+    }
+    if(crGhostMesh) {
+      const show = ghostCRCheckbox.checked && crGhostFrames.length > 0 && lapStartTime !== null;
+      crGhostMesh.visible = show;
+      if(show) {
+        const fi  = Math.max(0, ghostPlaybackCRFrame - 1);
+        const fi2 = ghostPlaybackCRFrame;
+        const fa  = crGhostFrames[fi], fb = crGhostFrames[fi2];
+        crGhostMesh.position.set(
+          fa.px + (fb.px - fa.px) * alpha,
+          fa.py + (fb.py - fa.py) * alpha,
+          fa.pz + (fb.pz - fa.pz) * alpha
+        );
+        crGhostMesh.rotation.set(0,
+          fa.ry !== undefined
+            ? fa.ry + (fb.ry - fa.ry) * alpha
+            : Math.atan2(2*(fb.qw*fb.qy), 1-2*(fb.qy*fb.qy)),
+          0, 'YXZ');
+      }
+    }
 
     // Speedometer
     const ns = Math.abs(speed) / maxSpeed;
@@ -1141,9 +1181,9 @@ function animate() {
 
     renderer.render(scene, camera);
 
-    // Restore true physics state so the next tick starts correctly
-    carModel.position.copy(postPos);
-    carModel.rotation.set(0, postYaw, 0, 'YXZ');
+    // Restore true physics position so the next frame's ticks start correctly
+    carModel.position.copy(postPhysicsPos);
+    carModel.rotation.set(0, carYaw, 0, 'YXZ');
   } else {
     renderer.render(scene, camera);
   }
