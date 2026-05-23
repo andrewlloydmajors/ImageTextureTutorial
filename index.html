@@ -391,17 +391,24 @@ canvas { display: block; }
 <!-- ── SUBMIT MODAL ──────────────────────────────────── -->
 <div id="submitModal" class="modal-backdrop hidden">
   <div class="modal-box">
-    <h2>🏆 Top 3 Lap!</h2>
-    <p>You've set a top-3 time! Submit your score to the leaderboard. Your car texture will be shown pending approval.</p>
+    <h2 id="submitTitle">🏆 Top 3 Lap!</h2>
+    <p id="submitDesc">You've set a top-3 time! Submit your score to the leaderboard. Your car texture will be shown pending approval.</p>
     <img id="submitPreview" class="modal-preview" src="" alt="Your car">
-    <div id="submitError" class="modal-error">Please fill in both fields with a valid email.</div>
+    <div id="submitError" class="modal-error"></div>
     <input type="text"  id="submitName"  placeholder="Your name" maxlength="40">
-    <input type="email" id="submitEmail" placeholder="School email address">
+    <input type="email" id="submitEmail" placeholder="School email (must end in student.us)">
     <div class="modal-btn-row">
       <button class="btn-secondary" id="submitCancel">Maybe later</button>
       <button class="btn-primary"   id="submitConfirm">Submit ✓</button>
     </div>
   </div>
+</div>
+
+<!-- Change info button — shown in UI panel after first submission -->
+<div id="changeInfoWrap" style="display:none; position:absolute; bottom:62px; left:50%; transform:translateX(-50%); z-index:10;">
+  <button id="changeInfoBtn" style="background:rgba(0,0,0,0.6); color:#fff; border:1px solid rgba(255,255,255,0.3); border-radius:8px; padding:6px 14px; font-size:12px; cursor:pointer; backdrop-filter:blur(4px);">
+    ✏️ Edit my leaderboard info
+  </button>
 </div>
 
 <!-- ── IMPORT MAP (required for GLTFLoader.js to resolve 'three') ── -->
@@ -923,7 +930,13 @@ let pendingLapMs=null;
 let sessionSubmission = null;
 try {
   const saved = sessionStorage.getItem('tmcSubmission');
-  if(saved) sessionSubmission = JSON.parse(saved);
+  if(saved) {
+    sessionSubmission = JSON.parse(saved);
+    // Restore the change-info button if they already submitted this session
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('changeInfoWrap').style.display = 'block';
+    });
+  }
 } catch(e) {}
 
 async function upsertLeaderboardEntry(name, email, lapMs) {
@@ -961,6 +974,25 @@ async function upsertLeaderboardEntry(name, email, lapMs) {
   await saveLeaderboard();
 }
 
+function openSubmitModal(lapMs, isEdit) {
+  pendingLapMs = lapMs;
+  const title = document.getElementById('submitTitle');
+  const desc  = document.getElementById('submitDesc');
+  if(isEdit) {
+    title.textContent = '✏️ Edit your info';
+    desc.textContent  = 'Update your name or email. Your entry will go back to pending approval.';
+  } else {
+    title.textContent = '🏆 Top 3 Lap!';
+    desc.textContent  = "You've set a top-3 time! Submit your score to the leaderboard. Your car texture will be shown pending approval.";
+  }
+  // Pre-fill with existing session data if available
+  document.getElementById('submitName').value  = sessionSubmission ? sessionSubmission.name  : '';
+  document.getElementById('submitEmail').value = sessionSubmission ? sessionSubmission.email : '';
+  document.getElementById('submitError').style.display = 'none';
+  document.getElementById('submitPreview').src = carTextureDataUrl||'placeholdercartexture.png';
+  submitModal.classList.remove('hidden');
+}
+
 function showSubmitModal(lapMs) {
   pendingLapMs = lapMs;
 
@@ -970,29 +1002,39 @@ function showSubmitModal(lapMs) {
     return;
   }
 
-  // Pre-fill name/email if we have session data (shouldn't reach here if set, but safe)
-  document.getElementById('submitName').value  = '';
-  document.getElementById('submitEmail').value = '';
-  document.getElementById('submitError').style.display = 'none';
-  document.getElementById('submitPreview').src = carTextureDataUrl||'placeholdercartexture.png';
-  submitModal.classList.remove('hidden');
+  openSubmitModal(lapMs, false);
 }
 
 document.getElementById('submitCancel').addEventListener('click', ()=>submitModal.classList.add('hidden'));
 
+document.getElementById('changeInfoBtn').addEventListener('click', () => {
+  // Open modal in edit mode with their current info pre-filled.
+  // pendingLapMs stays null — on confirm we'll use bestLapMs instead.
+  openSubmitModal(null, true);
+});
+
 document.getElementById('submitConfirm').addEventListener('click', async ()=>{
   const name  = document.getElementById('submitName').value.trim();
   const email = document.getElementById('submitEmail').value.trim();
-  if(!name || !email || !email.includes('@')) {
-    document.getElementById('submitError').style.display='block'; return;
+  const emailErr = document.getElementById('submitError');
+  if(!name) {
+    emailErr.textContent = 'Please enter your name.';
+    emailErr.style.display='block'; return;
+  }
+  if(!email || !email.toLowerCase().endsWith('student.us')) {
+    emailErr.textContent = 'Email must be your school email ending in student.us.';
+    emailErr.style.display='block'; return;
   }
 
   // Save to session so future top-3 laps skip the modal
   sessionSubmission = { name, email };
   try { sessionStorage.setItem('tmcSubmission', JSON.stringify(sessionSubmission)); } catch(e) {}
 
-  await upsertLeaderboardEntry(name, email, pendingLapMs);
+  const lapToSubmit = pendingLapMs !== null ? pendingLapMs : bestLapMs;
+  if(lapToSubmit === null) { submitModal.classList.add('hidden'); return; }
+  await upsertLeaderboardEntry(name, email, lapToSubmit);
   submitModal.classList.add('hidden');
+  document.getElementById('changeInfoWrap').style.display = 'block';
 });
 
 // ═══════════════════════════════════════════════════════
@@ -1316,9 +1358,26 @@ function applyCarTexture(url) {
       lockOverlay.style.display = 'none';
       initSound();
     }
-    // Capture the 3/4 view thumbnail after the texture is applied
-    // Use requestAnimationFrame to ensure the texture is fully uploaded to GPU first
-    requestAnimationFrame(() => captureCarThumbnail());
+    // Capture the 3/4 view thumbnail, then if they already have a leaderboard
+    // entry flip it back to pending since the texture has changed.
+    requestAnimationFrame(() => {
+      captureCarThumbnail();
+      // Give captureCarThumbnail one more frame to set carTextureDataUrl
+      requestAnimationFrame(async () => {
+        if(sessionSubmission && carTextureApplied) {
+          const fresh = await fbGet(LB_DOC);
+          const entries = fresh ? (fresh.entries || []) : [];
+          const idx = entries.findIndex(e =>
+            e.email.toLowerCase() === sessionSubmission.email.toLowerCase()
+          );
+          if(idx !== -1) {
+            entries[idx].approved       = false;
+            entries[idx].textureDataUrl = carTextureDataUrl || entries[idx].textureDataUrl;
+            await fbSet(LB_DOC, { entries });
+          }
+        }
+      });
+    });
   });
 }
 
