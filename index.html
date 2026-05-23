@@ -943,135 +943,170 @@ document.getElementById('submitConfirm').addEventListener('click', async ()=>{
 });
 
 // ═══════════════════════════════════════════════════════
-// DELTA TIME + MAIN LOOP
+// FIXED-TIMESTEP PHYSICS LOOP
 // ═══════════════════════════════════════════════════════
-let lastTime=null;
+// Physics always runs in fixed 1/60s steps regardless of framerate.
+// A 120fps device runs the render loop twice as often but physics
+// still advances by exactly one tick per 16.67ms of real time,
+// so lap times and car speed are identical on every device.
+// Ghost frames are recorded once per physics tick, so playback
+// is also framerate-independent.
+const PHYSICS_STEP = 1000 / 60;   // 16.667 ms
+let   physicsAccum = 0;
+let   lastTime     = null;
+
+function physicsTick() {
+  // ── Acceleration & friction ────────────────────────
+  if(keys['w'])      speed += acceleration;
+  else if(keys['s']) speed -= acceleration;
+  else {
+    if(speed >  friction) speed -= friction;
+    else if(speed < -friction) speed += friction;
+    else speed = 0;
+  }
+  speed = Math.max(-maxSpeed, Math.min(maxSpeed, speed));
+
+  const isDrifting  = keys[' '] && Math.abs(speed) > maxSpeed * 0.3;
+  const speedFactor = Math.min(Math.abs(speed) / maxSpeed, 1);
+  const turnDir     = speed < 0 ? -1 : 1;
+  const activeTurn  = isDrifting ? turnSpeed * DRIFT_TURN_BOOST : turnSpeed;
+  const si          = (keys['a'] ? 1 : 0) - (keys['d'] ? 1 : 0);
+  const steerTarget = si * activeTurn * speedFactor * turnDir;
+  steerRate += (steerTarget - steerRate) * (si !== 0 ? STEER_BUILDUP : STEER_FALLOFF);
+  carModel.rotation.y += steerRate;
+
+  const fd = new THREE.Vector3(0,0,-1).applyQuaternion(carModel.quaternion);
+  const fv = fd.clone().multiplyScalar(speed);
+
+  if(isDrifting) {
+    const rd = new THREE.Vector3(1,0,0).applyQuaternion(carModel.quaternion);
+    lateralVel.addScaledVector(rd, si * DRIFT_BUILDUP * speedFactor);
+    const ml = Math.abs(speed) * 0.9;
+    if(lateralVel.length() > ml) lateralVel.setLength(ml);
+    lateralVel.multiplyScalar(1 - DRIFT_GRIP_SLIDE);
+    speed *= (1 - DRIFT_FRICTION);
+  } else {
+    if(si !== 0 && Math.abs(speed) > maxSpeed * 0.2) {
+      const rd = new THREE.Vector3(1,0,0).applyQuaternion(carModel.quaternion);
+      lateralVel.addScaledVector(rd, si * NATURAL_BLEED * speedFactor);
+    }
+    lateralVel.multiplyScalar(1 - DRIFT_GRIP);
+  }
+
+  const tv = fv.clone().add(lateralVel); tv.y = 0;
+  carModel.position.add(tv);
+
+  updateEngineSound(speed, isDrifting);
+  updateDriftSound(isDrifting);
+  updateAabbObstacles(); resolveAabb(); resolveWallRaycasts();
+
+  // ── Ghost recording (one frame per physics tick) ───
+  if(lapStartTime !== null) {
+    currentLapGhostFrames.push({
+      px:carModel.position.x, py:carModel.position.y, pz:carModel.position.z,
+      qx:carModel.quaternion.x, qy:carModel.quaternion.y,
+      qz:carModel.quaternion.z, qw:carModel.quaternion.w
+    });
+  }
+
+  // ── Ghost playback (one frame per physics tick) ────
+  if(pbGhostMesh) {
+    const show = ghostPBCheckbox.checked && pbGhostFrames.length > 0 && lapStartTime !== null;
+    pbGhostMesh.visible = show;
+    if(show) {
+      updateGhost(pbGhostMesh, pbGhostFrames, ghostPlaybackPBFrame);
+      ghostPlaybackPBFrame = Math.min(ghostPlaybackPBFrame + 1, pbGhostFrames.length - 1);
+    }
+  }
+  if(crGhostMesh) {
+    const show = ghostCRCheckbox.checked && crGhostFrames.length > 0 && lapStartTime !== null;
+    crGhostMesh.visible = show;
+    if(show) {
+      updateGhost(crGhostMesh, crGhostFrames, ghostPlaybackCRFrame);
+      ghostPlaybackCRFrame = Math.min(ghostPlaybackCRFrame + 1, crGhostFrames.length - 1);
+    }
+  }
+
+  // ── Lap timer & checkpoint ─────────────────────────
+  if(finishLineBox || checkpointBox) {
+    _carBox.setFromObject(carModel);
+    if(lapStartTime === null && finishLineBox && _carBox.intersectsBox(finishLineBox) && speed > 0) {
+      lapStartTime = performance.now(); hasLeftFinishLine = false; checkpointCleared = false;
+      currentLapGhostFrames = []; ghostPlaybackPBFrame = 0; ghostPlaybackCRFrame = 0;
+    }
+    if(lapStartTime !== null) {
+      if(!checkpointCleared && _carBox.intersectsBox(checkpointBox)) checkpointCleared = true;
+      if(finishLineBox && _carBox.intersectsBox(finishLineBox)) {
+        if(hasLeftFinishLine && checkpointCleared && speed > 0) {
+          const lapMs = performance.now() - lapStartTime;
+          if(bestLapMs === null || lapMs < bestLapMs) {
+            bestLapMs = lapMs; bestLapEl.textContent = formatTime(bestLapMs);
+            bestLapEl.style.color = '#7ef'; setTimeout(() => bestLapEl.style.color = '', 1500);
+            pbGhostFrames = currentLapGhostFrames.slice();
+            const topMs = lbEntries.length > 0 ? lbEntries[0].timeMs : Infinity;
+            if(lapMs < topMs) { crGhostFrames = currentLapGhostFrames.slice(); saveRecordGhost(crGhostFrames); }
+          }
+          playSound('lap');
+          if(isTop3(lapMs)) showSubmitModal(lapMs);
+          lapStartTime = performance.now(); hasLeftFinishLine = false; checkpointCleared = false;
+          currentLapGhostFrames = []; ghostPlaybackPBFrame = 0; ghostPlaybackCRFrame = 0;
+        }
+      } else { hasLeftFinishLine = true; }
+      updateLapTimer();
+    }
+  }
+
+  // ── Wheels ─────────────────────────────────────────
+  if(frontWheelPivot) {
+    let st = 0; if(keys['a']) st = maxWheelSteer; if(keys['d']) st = -maxWheelSteer;
+    if(isDrifting) st *= 1.5;
+    wheelSteer += (st - wheelSteer) * 0.15;
+    frontWheelPivot.rotation.y = wheelSteer;
+    _spinQ.setFromAxisAngle(_spinAxis, -speed * wheelSpinFactor);
+    frontWheelSpinner.quaternion.premultiply(_spinQ);
+  }
+  if(backWheelSpinner) {
+    _spinQ.setFromAxisAngle(_spinAxis, -speed * wheelSpinFactor);
+    backWheelSpinner.quaternion.premultiply(_spinQ);
+  }
+}
 
 function animate() {
   requestAnimationFrame(animate);
-  const now=performance.now();
-  const delta=lastTime===null ? 1 : Math.min((now-lastTime)/(1000/60),3);
-  lastTime=now;
+
+  const now = performance.now();
+  if(lastTime === null) lastTime = now;
+  physicsAccum += Math.min(now - lastTime, 100); // cap at 100ms to avoid spiral of death
+  lastTime = now;
 
   if(carModel && !ghostsInitialized) {
-    ghostsInitialized=true;
+    ghostsInitialized = true;
     initGhosts();
-    loadRecordGhost().then(f=>{ if(f) crGhostFrames=f; });
+    loadRecordGhost().then(f => { if(f) crGhostFrames = f; });
     loadLeaderboard();
   }
 
+  // Run as many fixed physics ticks as time has accumulated
   if(carModel && carTextureApplied) {
-
-    if(keys['w'])      speed+=acceleration*delta;
-    else if(keys['s']) speed-=acceleration*delta;
-    else {
-      if(speed>friction*delta)       speed-=friction*delta;
-      else if(speed<-friction*delta) speed+=friction*delta;
-      else speed=0;
-    }
-    speed=Math.max(-maxSpeed,Math.min(maxSpeed,speed));
-
-    const isDrifting  = keys[' '] && Math.abs(speed)>maxSpeed*0.3;
-    const speedFactor = Math.min(Math.abs(speed)/maxSpeed,1);
-    const turnDir     = speed<0?-1:1;
-    const activeTurn  = isDrifting ? turnSpeed*DRIFT_TURN_BOOST : turnSpeed;
-    const si          = (keys['a']?1:0)-(keys['d']?1:0);
-    const steerTarget = si*activeTurn*speedFactor*turnDir;
-    steerRate += (steerTarget-steerRate)*(si!==0?STEER_BUILDUP:STEER_FALLOFF)*delta;
-    carModel.rotation.y += steerRate*delta;
-
-    const fd = new THREE.Vector3(0,0,-1).applyQuaternion(carModel.quaternion);
-    const fv = fd.clone().multiplyScalar(speed);
-
-    if(isDrifting) {
-      const rd=new THREE.Vector3(1,0,0).applyQuaternion(carModel.quaternion);
-      lateralVel.addScaledVector(rd, si*DRIFT_BUILDUP*speedFactor*delta);
-      const ml=Math.abs(speed)*0.9; if(lateralVel.length()>ml) lateralVel.setLength(ml);
-      lateralVel.multiplyScalar(1-DRIFT_GRIP_SLIDE*delta);
-      speed*=(1-DRIFT_FRICTION*delta);
-    } else {
-      if(si!==0 && Math.abs(speed)>maxSpeed*0.2) {
-        const rd=new THREE.Vector3(1,0,0).applyQuaternion(carModel.quaternion);
-        lateralVel.addScaledVector(rd, si*NATURAL_BLEED*speedFactor*delta);
-      }
-      lateralVel.multiplyScalar(1-DRIFT_GRIP*delta);
+    while(physicsAccum >= PHYSICS_STEP) {
+      physicsTick();
+      physicsAccum -= PHYSICS_STEP;
     }
 
-    const tv=fv.clone().add(lateralVel); tv.y=0; carModel.position.add(tv);
+    // Speedometer updates every render frame (cosmetic only, doesn't affect physics)
+    const ns = Math.abs(speed) / maxSpeed;
+    document.getElementById('speedFill').style.width = (ns * 100) + '%';
+    document.getElementById('speedVal').textContent  = Math.round(ns * 120);
 
-    updateEngineSound(speed,isDrifting);
-    updateDriftSound(isDrifting);
-    updateAabbObstacles(); resolveAabb(); resolveWallRaycasts();
-
-    const ns=Math.abs(speed)/maxSpeed;
-    document.getElementById('speedFill').style.width=(ns*100)+'%';
-    document.getElementById('speedVal').textContent=Math.round(ns*120);
-
-    if(lapStartTime!==null) {
-      currentLapGhostFrames.push({
-        px:carModel.position.x, py:carModel.position.y, pz:carModel.position.z,
-        qx:carModel.quaternion.x, qy:carModel.quaternion.y, qz:carModel.quaternion.z, qw:carModel.quaternion.w
-      });
-    }
-
-    if(pbGhostMesh) {
-      const show=ghostPBCheckbox.checked && pbGhostFrames.length>0 && lapStartTime!==null;
-      pbGhostMesh.visible=show;
-      if(show){ updateGhost(pbGhostMesh,pbGhostFrames,ghostPlaybackPBFrame); ghostPlaybackPBFrame=Math.min(ghostPlaybackPBFrame+1,pbGhostFrames.length-1); }
-    }
-    if(crGhostMesh) {
-      const show=ghostCRCheckbox.checked && crGhostFrames.length>0 && lapStartTime!==null;
-      crGhostMesh.visible=show;
-      if(show){ updateGhost(crGhostMesh,crGhostFrames,ghostPlaybackCRFrame); ghostPlaybackCRFrame=Math.min(ghostPlaybackCRFrame+1,crGhostFrames.length-1); }
-    }
-
-    if(finishLineBox||checkpointBox) {
-      _carBox.setFromObject(carModel);
-      if(lapStartTime===null && finishLineBox && _carBox.intersectsBox(finishLineBox) && speed>0) {
-        lapStartTime=performance.now(); hasLeftFinishLine=false; checkpointCleared=false;
-        currentLapGhostFrames=[]; ghostPlaybackPBFrame=0; ghostPlaybackCRFrame=0;
-      }
-      if(lapStartTime!==null) {
-        if(!checkpointCleared && _carBox.intersectsBox(checkpointBox)) checkpointCleared=true;
-        if(finishLineBox && _carBox.intersectsBox(finishLineBox)) {
-          if(hasLeftFinishLine && checkpointCleared && speed>0) {
-            const lapMs=performance.now()-lapStartTime;
-            if(bestLapMs===null||lapMs<bestLapMs) {
-              bestLapMs=lapMs; bestLapEl.textContent=formatTime(bestLapMs);
-              bestLapEl.style.color='#7ef'; setTimeout(()=>bestLapEl.style.color='',1500);
-              pbGhostFrames=currentLapGhostFrames.slice();
-              const topMs=lbEntries.length>0?lbEntries[0].timeMs:Infinity;
-              if(lapMs<topMs){ crGhostFrames=currentLapGhostFrames.slice(); saveRecordGhost(crGhostFrames); }
-            }
-            playSound('lap');
-            if(isTop3(lapMs)) showSubmitModal(lapMs);
-            lapStartTime=performance.now(); hasLeftFinishLine=false; checkpointCleared=false;
-            currentLapGhostFrames=[]; ghostPlaybackPBFrame=0; ghostPlaybackCRFrame=0;
-          }
-        } else { hasLeftFinishLine=true; }
-        updateLapTimer();
-      }
-    }
-
-    if(frontWheelPivot) {
-      let st=0; if(keys['a'])st=maxWheelSteer; if(keys['d'])st=-maxWheelSteer;
-      if(isDrifting)st*=1.5;
-      wheelSteer+=(st-wheelSteer)*0.15*delta; frontWheelPivot.rotation.y=wheelSteer;
-      _spinQ.setFromAxisAngle(_spinAxis,-speed*wheelSpinFactor*delta);
-      frontWheelSpinner.quaternion.premultiply(_spinQ);
-    }
-    if(backWheelSpinner) {
-      _spinQ.setFromAxisAngle(_spinAxis,-speed*wheelSpinFactor*delta);
-      backWheelSpinner.quaternion.premultiply(_spinQ);
-    }
-
-    smoothedCarPos.lerp(carModel.position,0.15*delta);
-    const rot=new THREE.Euler(pitch,yaw,0,'YXZ');
-    const offset=baseOffset.clone().applyEuler(rot).applyQuaternion(carModel.quaternion);
-    camera.position.lerp(smoothedCarPos.clone().add(offset),0.12*delta);
+    // Camera follows the car — updated every render frame for smoothness
+    smoothedCarPos.lerp(carModel.position, 0.15);
+    const rot    = new THREE.Euler(pitch, yaw, 0, 'YXZ');
+    const offset = baseOffset.clone().applyEuler(rot).applyQuaternion(carModel.quaternion);
+    camera.position.lerp(smoothedCarPos.clone().add(offset), 0.12);
     camera.lookAt(smoothedCarPos.clone().add(lookOffset));
   }
-  renderer.render(scene,camera);
+
+  renderer.render(scene, camera);
 }
 animate();
 
