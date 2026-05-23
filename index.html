@@ -404,6 +404,15 @@ canvas { display: block; }
   </div>
 </div>
 
+<!-- ── IMPORT MAP (required for GLTFLoader.js to resolve 'three') ── -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "./build/three.module.js"
+  }
+}
+</script>
+
 <!-- ── FIREBASE ──────────────────────────────────────── -->
 <script type="module">
 import { initializeApp }                        from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
