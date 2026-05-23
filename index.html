@@ -526,24 +526,6 @@ let carTextureDataUrl = null;
 let pendingCarTextureUrl = null;  // holds URL if uploaded before car model finished loading
 const lockOverlay = document.getElementById('lockOverlay');
 
-function applyCarTexture(url) {
-  textureLoader.load(url, (tex) => {
-    applyTexture(carModel, tex);
-    if (!carTextureApplied) {
-      carTextureApplied = true;
-      lockOverlay.style.display = 'none';
-      initSound();
-    }
-    const img = new Image();
-    img.onload = () => {
-      const c = document.createElement('canvas'); c.width = 128; c.height = 128;
-      c.getContext('2d').drawImage(img, 0, 0, 128, 128);
-      carTextureDataUrl = c.toDataURL('image/jpeg', 0.7);
-    };
-    img.src = url;
-  });
-}
-
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 3000);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -1096,6 +1078,24 @@ window.addEventListener('resize',()=>{
 // ═══════════════════════════════════════════════════════
 // TEXTURE UPLOADS
 // ═══════════════════════════════════════════════════════
+function applyCarTexture(url) {
+  textureLoader.load(url, (tex) => {
+    applyTexture(carModel, tex);
+    if (!carTextureApplied) {
+      carTextureApplied = true;
+      lockOverlay.style.display = 'none';
+      initSound();
+    }
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas'); c.width = 128; c.height = 128;
+      c.getContext('2d').drawImage(img, 0, 0, 128, 128);
+      carTextureDataUrl = c.toDataURL('image/jpeg', 0.7);
+    };
+    img.src = url;
+  });
+}
+
 document.getElementById('carTextureUpload').addEventListener('change',(e)=>{
   const url = URL.createObjectURL(e.target.files[0]);
   if (!carModel) {
