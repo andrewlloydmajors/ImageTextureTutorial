@@ -1131,11 +1131,16 @@ function animate() {
     document.getElementById('speedFill').style.width = (ns * 100) + '%';
     document.getElementById('speedVal').textContent  = Math.round(ns * 120);
 
-    // Camera
-    smoothedCarPos.lerp(renderPos, 0.3);
+    // Camera — use a smoothed yaw for the car's facing so the camera
+    // doesn't snap when the interpolated quaternion has tiny discontinuities.
+    // We lerp smoothedCarPos and camera.position rather than copying directly.
+    smoothedCarPos.lerp(renderPos, 0.15);
     const rot    = new THREE.Euler(pitch, yaw, 0, 'YXZ');
-    const offset = baseOffset.clone().applyEuler(rot).applyQuaternion(renderQuat);
-    camera.position.copy(smoothedCarPos.clone().add(offset));
+    // Derive offset from carYaw (the stable physics angle) instead of renderQuat
+    // so turning never feeds jitter into the camera offset direction.
+    const carFacingQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, carYaw, 0, 'YXZ'));
+    const offset = baseOffset.clone().applyEuler(rot).applyQuaternion(carFacingQuat);
+    camera.position.lerp(smoothedCarPos.clone().add(offset), 0.12);
     camera.lookAt(smoothedCarPos.clone().add(lookOffset));
 
     renderer.render(scene, camera);
