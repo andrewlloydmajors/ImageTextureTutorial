@@ -13,6 +13,7 @@ body {
 }
 canvas { display: block; }
 
+/* ── UI PANEL ─────────────────────────────────────────── */
 #uiPanel {
   position: absolute;
   top: 10px;
@@ -65,11 +66,143 @@ canvas { display: block; }
   cursor: pointer;
 }
 
+/* QoL buttons row */
+#qolRow {
+  display: flex;
+  gap: 6px;
+}
+#qolRow button {
+  flex: 1;
+  padding: 5px 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  border: 1px solid #ccc;
+  background: #f5f5f5;
+}
+#qolRow button:hover { background: #e8e8e8; }
+
+/* Ghost toggles */
+#ghostRow {
+  display: flex;
+  gap: 6px;
+}
+#ghostRow label {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: #444;
+  cursor: pointer;
+}
+
+/* Speedometer */
+#speedometer {
+  font-size: 12px;
+  color: #444;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+#speedBar {
+  flex: 1;
+  height: 6px;
+  background: #ddd;
+  border-radius: 3px;
+  overflow: hidden;
+}
+#speedFill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #4caf50, #ff9800, #f44336);
+  border-radius: 3px;
+  transition: width 0.05s;
+}
+
+/* ── LEADERBOARD ──────────────────────────────────────── */
+#leaderboard {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 10;
+  background: rgba(0,0,0,0.78);
+  color: #fff;
+  padding: 14px 16px;
+  border-radius: 12px;
+  width: 220px;
+  font-family: Arial, sans-serif;
+}
+#leaderboard h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #ffd700;
+  text-align: center;
+}
+.lb-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.lb-pos {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: #aaa;
+  width: 52px;
+  flex-shrink: 0;
+  line-height: 1.2;
+}
+.lb-pos.gold   { color: #ffd700; }
+.lb-pos.silver { color: #c0c0c0; }
+.lb-pos.bronze { color: #cd7f32; }
+.lb-car {
+  width: 36px;
+  height: 36px;
+  border-radius: 4px;
+  object-fit: cover;
+  background: #333;
+  flex-shrink: 0;
+}
+.lb-info { flex: 1; min-width: 0; }
+.lb-name {
+  font-size: 12px;
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #fff;
+}
+.lb-name.pending { color: #888; font-style: italic; font-weight: normal; }
+.lb-time { font-size: 12px; color: #7ef; font-family: monospace; }
+
+/* ── LAP DISPLAY ──────────────────────────────────────── */
+#lapDisplay {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  padding: 8px 20px;
+  border-radius: 10px;
+  font-family: monospace;
+  font-size: 15px;
+  display: flex;
+  gap: 24px;
+  pointer-events: none;
+}
+#lapDisplay span { color: #7ef; }
+
+/* ── LOCK OVERLAY ─────────────────────────────────────── */
 #lockOverlay {
   position: absolute;
   inset: 0;
   z-index: 5;
-  background: rgba(0, 0, 0, 0.38);
+  background: rgba(0,0,0,0.38);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -85,7 +218,7 @@ canvas { display: block; }
 #lockOverlay .lock-msg {
   font-size: 22px;
   font-weight: bold;
-  color: #ffffff;
+  color: #fff;
   text-shadow: 0 2px 8px rgba(0,0,0,0.9);
   text-align: center;
   max-width: 420px;
@@ -96,28 +229,108 @@ canvas { display: block; }
   color: rgba(255,255,255,0.7);
   text-align: center;
 }
+
+/* ── MODAL BASE ───────────────────────────────────────── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal-backdrop.hidden { display: none; }
+.modal-box {
+  background: #fff;
+  border-radius: 14px;
+  padding: 28px 32px;
+  max-width: 380px;
+  width: 90%;
+  font-family: Arial, sans-serif;
+}
+.modal-box h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+}
+.modal-box p {
+  margin: 0 0 16px;
+  font-size: 14px;
+  color: #555;
+  line-height: 1.5;
+}
+.modal-box input[type="text"],
+.modal-box input[type="email"] {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid #ccc;
+  border-radius: 7px;
+  font-size: 14px;
+  margin-bottom: 10px;
+}
+.modal-preview {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 2px solid #ddd;
+  display: block;
+  margin: 0 auto 14px;
+}
+.modal-btn-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+.modal-btn-row button {
+  flex: 1;
+  padding: 10px;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  border: none;
+}
+.btn-primary {
+  background: #2563eb;
+  color: #fff;
+  font-weight: bold;
+}
+.btn-primary:hover { background: #1d4ed8; }
+.btn-secondary {
+  background: #f0f0f0;
+  color: #333;
+}
+.btn-secondary:hover { background: #e0e0e0; }
+.modal-error {
+  color: #c00;
+  font-size: 13px;
+  margin: -4px 0 8px;
+  display: none;
+}
 </style>
 </head>
 <body>
 
+<!-- ── LOCK OVERLAY ──────────────────────────────────── -->
 <div id="lockOverlay">
   <div class="lock-icon">🔒</div>
   <div class="lock-msg">Upload a car texture to start driving</div>
   <div class="lock-sub">Use the "Car Texture" file picker in the top-left panel</div>
 </div>
 
+<!-- ── LEFT PANEL ────────────────────────────────────── -->
 <div id="uiPanel">
   <label>Car Texture
-    <input type="file" id="carTextureUpload">
+    <input type="file" id="carTextureUpload" accept="image/*">
   </label>
   <label>Building Texture
-    <input type="file" id="buildingTextureUpload">
+    <input type="file" id="buildingTextureUpload" accept="image/*">
   </label>
   <label>Skybox / 360 Background
-    <input type="file" id="skyboxUpload">
+    <input type="file" id="skyboxUpload" accept="image/*">
   </label>
   <label>Ground Texture
-    <input type="file" id="groundUpload">
+    <input type="file" id="groundUpload" accept="image/*">
   </label>
 
   <div id="colorControls">
@@ -132,20 +345,57 @@ canvas { display: block; }
     </label>
   </div>
 
-  <button id="screenshotBtn" style="padding:6px 10px;border-radius:6px;cursor:pointer;font-size:13px;">
-    Screenshot
-  </button>
-  <div id="info">
-    W/S = Drive<br>
-    A/D = Turn<br>
-    Space = Drift<br>
-    Drag Mouse = Look Around
+  <div id="qolRow">
+    <button id="resetBtn">↺ Reset</button>
+    <button id="fullscreenBtn">⛶ Fullscreen</button>
+    <button id="screenshotBtn">📷 Shot</button>
   </div>
-  <div id="lapDisplay" style="font-size:13px; color:#222; margin-top:4px; line-height:1.8;">
-    <div>Current: <span id="currentLap">0:00.000</span></div>
-    <div>Best:&nbsp;&nbsp;&nbsp;&nbsp;<span id="bestLap">--:--.---</span></div>
+
+  <div id="ghostRow">
+    <label><input type="checkbox" id="ghostPB" checked> 👻 My Best</label>
+    <label><input type="checkbox" id="ghostCR" checked> 🏆 Class Record</label>
+  </div>
+
+  <div id="speedometer">
+    <span style="font-size:11px;">SPD</span>
+    <div id="speedBar"><div id="speedFill"></div></div>
+    <span id="speedVal" style="font-size:11px;width:28px;text-align:right;">0</span>
+  </div>
+
+  <div id="info">
+    W/S = Drive &nbsp; A/D = Turn<br>
+    Space = Drift &nbsp; Drag = Look
   </div>
 </div>
+
+<!-- ── LAP DISPLAY ───────────────────────────────────── -->
+<div id="lapDisplay">
+  <div>Current: <span id="currentLap">0:00.000</span></div>
+  <div>Best: <span id="bestLap">--:--.---</span></div>
+</div>
+
+<!-- ── LEADERBOARD ───────────────────────────────────── -->
+<div id="leaderboard">
+  <h3>🏁 Class Leaderboard</h3>
+  <div id="lbEntries"></div>
+</div>
+
+<!-- ── SUBMIT MODAL ──────────────────────────────────── -->
+<div id="submitModal" class="modal-backdrop hidden">
+  <div class="modal-box">
+    <h2>🏆 Top 3 Lap!</h2>
+    <p>You've set a top-3 class time! Submit your score to the leaderboard. Your car texture will be shown pending teacher approval.</p>
+    <img id="submitPreview" class="modal-preview" src="" alt="Your car">
+    <div id="submitError" class="modal-error">Please fill in both fields.</div>
+    <input type="text"  id="submitName"  placeholder="Your name" maxlength="40">
+    <input type="email" id="submitEmail" placeholder="School email address">
+    <div class="modal-btn-row">
+      <button class="btn-secondary" id="submitCancel">Maybe later</button>
+      <button class="btn-primary"   id="submitConfirm">Submit ✓</button>
+    </div>
+  </div>
+</div>
+
 <script type="importmap">
 {
   "imports": {
@@ -158,20 +408,102 @@ canvas { display: block; }
 import * as THREE from 'three';
 import { GLTFLoader } from './jsm/loaders/GLTFLoader.js';
 
-// ─── SCENE ───────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+// STORAGE HELPERS
+// ═══════════════════════════════════════════════════════
+async function storageGet(key, shared = true) {
+  try {
+    const r = await window.storage.get(key, shared);
+    return r ? JSON.parse(r.value) : null;
+  } catch { return null; }
+}
+async function storageSet(key, value, shared = true) {
+  try {
+    await window.storage.set(key, JSON.stringify(value), shared);
+  } catch(e) { console.error('storage set failed', e); }
+}
+
+// ═══════════════════════════════════════════════════════
+// LEADERBOARD LOGIC
+// ═══════════════════════════════════════════════════════
+const MAX_ENTRIES = 10;
+const POSITIONS   = ['1st Place','2nd Place','3rd Place'];
+const POS_CLASS   = ['gold','silver','bronze'];
+
+let lbEntries = [];   // full list sorted by timeMs ascending
+
+async function loadLeaderboard() {
+  lbEntries = (await storageGet('leaderboard:entries')) || [];
+  renderLeaderboard();
+}
+
+async function saveLeaderboard() {
+  await storageSet('leaderboard:entries', lbEntries);
+}
+
+function renderLeaderboard() {
+  const container = document.getElementById('lbEntries');
+  container.innerHTML = '';
+  const top3 = lbEntries.slice(0, 3);
+  // Always show 3 slots
+  for (let i = 0; i < 3; i++) {
+    const e = top3[i];
+    const div = document.createElement('div');
+    div.className = 'lb-entry';
+    const posLabel = POSITIONS[i];
+    const posClass = POS_CLASS[i];
+    if (e) {
+      const approved = e.approved;
+      const imgSrc   = approved && e.textureDataUrl ? e.textureDataUrl : 'placeholdercartexture.png';
+      const nameText = approved ? e.name : 'Pending approval';
+      div.innerHTML = `
+        <div class="lb-pos ${posClass}">${posLabel}</div>
+        <img class="lb-car" src="${imgSrc}" alt="car">
+        <div class="lb-info">
+          <div class="lb-name ${approved ? '' : 'pending'}">${nameText}</div>
+          <div class="lb-time">${e.time}</div>
+        </div>`;
+    } else {
+      div.innerHTML = `
+        <div class="lb-pos ${posClass}">${posLabel}</div>
+        <img class="lb-car" src="placeholdercartexture.png" alt="car">
+        <div class="lb-info">
+          <div class="lb-name pending">—</div>
+          <div class="lb-time">--:--.---</div>
+        </div>`;
+    }
+    container.appendChild(div);
+  }
+}
+
+// Returns true if timeMs qualifies for top 3 (or there are fewer than 3 entries)
+function isTop3(timeMs) {
+  if (lbEntries.length < 3) return true;
+  return timeMs < lbEntries[2].timeMs;
+}
+
+// ═══════════════════════════════════════════════════════
+// CLASS RECORD GHOST STORAGE
+// ═══════════════════════════════════════════════════════
+async function loadClassRecordGhost() {
+  return await storageGet('leaderboard:classRecordGhost');
+}
+async function saveClassRecordGhost(frames) {
+  await storageSet('leaderboard:classRecordGhost', frames);
+}
+
+// ═══════════════════════════════════════════════════════
+// SCENE
+// ═══════════════════════════════════════════════════════
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(0xbfd1e5, 80, 600);
 
-// ─── DRIVE LOCK ──────────────────────────────────────────
 let carTextureApplied = false;
+let carTextureDataUrl = null;   // base64 snapshot of current car texture
 const lockOverlay = document.getElementById('lockOverlay');
 
-// ─── CAMERA ──────────────────────────────────────────────
-const camera = new THREE.PerspectiveCamera(
-  75, window.innerWidth / window.innerHeight, 0.1, 3000
-);
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 3000);
 
-// ─── RENDERER ────────────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
@@ -179,9 +511,7 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 document.body.appendChild(renderer.domElement);
 
-// ─── LIGHTING ────────────────────────────────────────────
-// Ambient at 1.0 so textures render close to their original colours by default.
-// The directional "sun" light adds directionality and warmth on top.
+// ── Lighting ─────────────────────────────────────────
 const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
 scene.add(ambientLight);
 
@@ -189,8 +519,8 @@ const directionalLight = new THREE.DirectionalLight(0xffffff, 3);
 directionalLight.position.set(100, 200, 100);
 directionalLight.castShadow = true;
 directionalLight.shadow.mapSize.set(4096, 4096);
-directionalLight.shadow.camera.near = 1;
-directionalLight.shadow.camera.far = 800;
+directionalLight.shadow.camera.near   = 1;
+directionalLight.shadow.camera.far    = 800;
 directionalLight.shadow.camera.left   = -350;
 directionalLight.shadow.camera.right  =  200;
 directionalLight.shadow.camera.top    =  250;
@@ -198,86 +528,69 @@ directionalLight.shadow.camera.bottom = -200;
 directionalLight.shadow.bias = -0.0005;
 scene.add(directionalLight);
 
-// ─── LOADERS ─────────────────────────────────────────────
+// ── Loaders ───────────────────────────────────────────
 const textureLoader = new THREE.TextureLoader();
-const gltfLoader   = new GLTFLoader();
+const gltfLoader    = new GLTFLoader();
 
-// ─── SKYBOX ──────────────────────────────────────────────
 textureLoader.load('RMSField.png', (tex) => {
   tex.mapping = THREE.EquirectangularReflectionMapping;
   scene.background = tex;
 });
 
-// ─── GROUND ──────────────────────────────────────────────
 const grassTexture = textureLoader.load('RMSgrass.png');
 grassTexture.wrapS = THREE.RepeatWrapping;
 grassTexture.wrapT = THREE.RepeatWrapping;
 grassTexture.repeat.set(300, 300);
 
 const groundMaterial = new THREE.MeshStandardMaterial({ map: grassTexture });
-const ground = new THREE.Mesh(
-  new THREE.PlaneGeometry(6000, 6000),
-  groundMaterial
-);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000), groundMaterial);
 ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 scene.add(ground);
 
-// ─── CAR STATE ───────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+// CAR
+// ═══════════════════════════════════════════════════════
 let carModel = null;
-
-let frontWheelPivot   = null;
-let frontWheelSpinner = null;
-let frontWheelMesh    = null;
-let backWheelPivot    = null;
-let backWheelSpinner  = null;
-
+let frontWheelPivot = null, frontWheelSpinner = null, frontWheelMesh = null;
+let backWheelPivot  = null, backWheelSpinner  = null;
 let wheelSteer = 0;
-const maxWheelSteer   = 0.3;
-const wheelSpinFactor = 0.4;
+const maxWheelSteer = 0.3, wheelSpinFactor = 0.4;
 
-// ─── PIVOT HELPER ────────────────────────────────────────
 function makeWheelPivot(wheel) {
   const pivot = new THREE.Group();
   const parent = wheel.parent;
-
   const box = new THREE.Box3().setFromObject(wheel);
   const worldCenter = new THREE.Vector3();
   box.getCenter(worldCenter);
-
   const localCenter = parent.worldToLocal(worldCenter.clone());
-
   parent.add(pivot);
   pivot.position.copy(localCenter);
-
   parent.remove(wheel);
   wheel.position.sub(localCenter);
   pivot.add(wheel);
-
   return pivot;
 }
 
-// ─── LOAD CAR ────────────────────────────────────────────
+const CAR_SPAWN_POS = new THREE.Vector3(-54, 0, 0);
+const CAR_SPAWN_ROT = Math.PI / 2;
+
 gltfLoader.load('Car.glb', (gltf) => {
   carModel = gltf.scene;
   carModel.scale.set(1, 1, 1);
-  carModel.position.set(-54, 0, 0);
-  carModel.rotation.y = Math.PI / 2;
+  carModel.position.copy(CAR_SPAWN_POS);
+  carModel.rotation.y = CAR_SPAWN_ROT;
 
   const box = new THREE.Box3().setFromObject(carModel);
   carModel.position.y -= box.min.y;
   carModel.position.y += 0.38;
 
   carModel.traverse((child) => {
-    if (child.isMesh) {
-      child.castShadow    = true;
-      child.receiveShadow = true;
-    }
+    if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; }
   });
 
   scene.add(carModel);
   smoothedCarPos.copy(carModel.position);
-
   carModel.updateMatrixWorld(true);
 
   const tireFront = carModel.getObjectByName('tire1_4');
@@ -290,26 +603,111 @@ gltfLoader.load('Car.glb', (gltf) => {
     frontWheelPivot.add(frontWheelSpinner);
     frontWheelPivot.remove(tireFront);
     frontWheelSpinner.add(tireFront);
-  } else {
-    console.warn('Front wheel node "tire1_4" not found in GLB.');
   }
-
   if (tireBack) {
     backWheelPivot   = makeWheelPivot(tireBack);
     backWheelSpinner = new THREE.Group();
     backWheelPivot.add(backWheelSpinner);
     backWheelPivot.remove(tireBack);
     backWheelSpinner.add(tireBack);
-  } else {
-    console.warn('Back wheel node "tire2_2" not found in GLB.');
   }
+
+  // Store spawn Y for reset
+  CAR_SPAWN_POS.y = carModel.position.y;
 });
 
-// ─── COLLISION ───────────────────────────────────────────
-const aabbObstacles = [];
-const aabbModels    = [];
-const _carBox       = new THREE.Box3();
-const _meshBox      = new THREE.Box3();
+// ── Reset car ─────────────────────────────────────────
+function resetCar() {
+  if (!carModel) return;
+  carModel.position.copy(CAR_SPAWN_POS);
+  carModel.rotation.set(0, CAR_SPAWN_ROT, 0);
+  speed = 0;
+  lateralVel.set(0, 0, 0);
+  steerRate = 0;
+  smoothedCarPos.copy(carModel.position);
+  // Reset lap state
+  lapStartTime      = null;
+  hasLeftFinishLine = false;
+  checkpointCleared = false;
+  currentLapEl.textContent = '0:00.000';
+  // Stop recording ghost for this lap
+  ghostRecording = [];
+  ghostRecordingActive = false;
+}
+
+// ═══════════════════════════════════════════════════════
+// GHOST CARS
+// ═══════════════════════════════════════════════════════
+// Each ghost is a semi-transparent clone of the car geometry
+// Position frames: { px, py, pz, qx, qy, qz, qw }
+
+let pbGhostFrames  = [];   // personal best lap recording
+let crGhostFrames  = [];   // class record lap recording (loaded from storage)
+let ghostRecording = [];   // frames being recorded this lap
+let ghostRecordingActive = false;
+
+// Playback state
+let pbGhostFrame = 0;
+let crGhostFrame = 0;
+
+let pbGhostMesh = null;
+let crGhostMesh = null;
+
+function buildGhostMesh(color) {
+  const g = new THREE.Group();
+  // We'll clone the car model once it exists and tint it
+  return g;
+}
+
+// Called once car model loads — create ghost meshes
+function initGhosts() {
+  if (!carModel) return;
+
+  pbGhostMesh = carModel.clone();
+  pbGhostMesh.traverse((child) => {
+    if (child.isMesh) {
+      child.material = child.material.clone();
+      child.material.transparent = true;
+      child.material.opacity = 0.38;
+      child.material.color = new THREE.Color(0x4488ff);
+      child.material.emissive = new THREE.Color(0x001133);
+      child.castShadow = false;
+    }
+  });
+  pbGhostMesh.visible = false;
+  scene.add(pbGhostMesh);
+
+  crGhostMesh = carModel.clone();
+  crGhostMesh.traverse((child) => {
+    if (child.isMesh) {
+      child.material = child.material.clone();
+      child.material.transparent = true;
+      child.material.opacity = 0.38;
+      child.material.color = new THREE.Color(0xffcc00);
+      child.material.emissive = new THREE.Color(0x221100);
+      child.castShadow = false;
+    }
+  });
+  crGhostMesh.visible = false;
+  scene.add(crGhostMesh);
+}
+
+function updateGhost(mesh, frames, frameIdx) {
+  if (!mesh || frames.length === 0) return;
+  const i = Math.min(frameIdx, frames.length - 1);
+  const f = frames[i];
+  mesh.position.set(f.px, f.py, f.pz);
+  mesh.quaternion.set(f.qx, f.qy, f.qz, f.qw);
+}
+
+const ghostPBCheckbox = document.getElementById('ghostPB');
+const ghostCRCheckbox = document.getElementById('ghostCR');
+
+// ═══════════════════════════════════════════════════════
+// COLLISION
+// ═══════════════════════════════════════════════════════
+const aabbObstacles = [], aabbModels = [];
+const _carBox = new THREE.Box3(), _meshBox = new THREE.Box3();
 
 function registerAabbModel(model) { aabbModels.push(model); }
 
@@ -325,16 +723,13 @@ function updateAabbObstacles() {
   }
 }
 
-const BOUNCE      = 0.4;
-const CAR_INSET_X = 0.7;
-const CAR_INSET_Z = 1.0;
+const BOUNCE = 0.4, CAR_INSET_X = 0.7, CAR_INSET_Z = 1.0;
 
 function resolveAabb() {
   if (!carModel) return;
   _carBox.setFromObject(carModel);
   _carBox.min.x += CAR_INSET_X; _carBox.max.x -= CAR_INSET_X;
   _carBox.min.z += CAR_INSET_Z; _carBox.max.z -= CAR_INSET_Z;
-
   for (const box of aabbObstacles) {
     if (!_carBox.intersectsBox(box)) continue;
     const overlapX = Math.min(_carBox.max.x - box.min.x, box.max.x - _carBox.min.x);
@@ -347,167 +742,120 @@ function resolveAabb() {
       carModel.position.z += dir * overlapZ;
     }
     speed = -speed * BOUNCE;
+    playSound('bump');
     _carBox.setFromObject(carModel);
     _carBox.min.x += CAR_INSET_X; _carBox.max.x -= CAR_INSET_X;
     _carBox.min.z += CAR_INSET_Z; _carBox.max.z -= CAR_INSET_Z;
   }
 }
 
-// ── Raycasting (wall) ────────────────────────────────────
 const wallMeshes = [];
-const _raycaster = new THREE.Raycaster();
-
+const _raycaster  = new THREE.Raycaster();
 const RAY_ORIGIN_Y = 2.0;
 const RAY_DOWN     = new THREE.Vector3(0, -1, 0);
 const RAY_FAR      = RAY_ORIGIN_Y + 0.5;
-
-const CAR_HALF_W = 1.0;
-const CAR_HALF_L = 1.8;
+const CAR_HALF_W = 1.0, CAR_HALF_L = 1.8;
 const SAMPLE_OFFSETS_LOCAL = [
-  new THREE.Vector3( 0,           0,  0           ),
-  new THREE.Vector3( CAR_HALF_W,  0,  0           ),
-  new THREE.Vector3(-CAR_HALF_W,  0,  0           ),
-  new THREE.Vector3( 0,           0, -CAR_HALF_L  ),
-  new THREE.Vector3( 0,           0,  CAR_HALF_L  ),
-  new THREE.Vector3( CAR_HALF_W,  0, -CAR_HALF_L  ),
-  new THREE.Vector3(-CAR_HALF_W,  0, -CAR_HALF_L  ),
-  new THREE.Vector3( CAR_HALF_W,  0,  CAR_HALF_L  ),
-  new THREE.Vector3(-CAR_HALF_W,  0,  CAR_HALF_L  ),
+  new THREE.Vector3( 0, 0, 0),
+  new THREE.Vector3( CAR_HALF_W, 0, 0),
+  new THREE.Vector3(-CAR_HALF_W, 0, 0),
+  new THREE.Vector3( 0, 0,-CAR_HALF_L),
+  new THREE.Vector3( 0, 0, CAR_HALF_L),
+  new THREE.Vector3( CAR_HALF_W, 0,-CAR_HALF_L),
+  new THREE.Vector3(-CAR_HALF_W, 0,-CAR_HALF_L),
+  new THREE.Vector3( CAR_HALF_W, 0, CAR_HALF_L),
+  new THREE.Vector3(-CAR_HALF_W, 0, CAR_HALF_L),
 ];
 
 let _rayDebugFrame = 0;
 function resolveWallRaycasts() {
   if (!carModel || wallMeshes.length === 0) return;
-
   _rayDebugFrame++;
-  const doLog = _rayDebugFrame % 60 === 0;
-
-  const carPos  = carModel.position;
-  const carQuat = carModel.quaternion;
-
+  const carPos = carModel.position, carQuat = carModel.quaternion;
   for (const localOffset of SAMPLE_OFFSETS_LOCAL) {
     const worldOffset = localOffset.clone().applyQuaternion(carQuat);
-    const origin = new THREE.Vector3(
-      carPos.x + worldOffset.x,
-      RAY_ORIGIN_Y,
-      carPos.z + worldOffset.z
-    );
-
+    const origin = new THREE.Vector3(carPos.x + worldOffset.x, RAY_ORIGIN_Y, carPos.z + worldOffset.z);
     _raycaster.set(origin, RAY_DOWN);
     _raycaster.far = RAY_FAR;
-
     const hits = _raycaster.intersectObjects(wallMeshes, false);
-    if (doLog && hits.length > 0) {
-      console.log('impactRatio:', Math.abs(new THREE.Vector3(0,0,-1).applyQuaternion(carModel.quaternion).dot(hits[0].face.normal.clone().transformDirection(hits[0].object.matrixWorld))).toFixed(3));
-    }
     if (hits.length === 0) continue;
-
-    const hit        = hits[0];
-    const wallNormal = hit.face.normal.clone()
-      .transformDirection(hit.object.matrixWorld);
+    const hit = hits[0];
+    const wallNormal = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
     wallNormal.y = 0;
     if (wallNormal.lengthSq() < 0.0001) continue;
     wallNormal.normalize();
-
     const toHit = new THREE.Vector3(carPos.x - hit.point.x, 0, carPos.z - hit.point.z);
     if (wallNormal.dot(toHit) < 0) wallNormal.negate();
-
     const facingDir   = new THREE.Vector3(0, 0, -1).applyQuaternion(carModel.quaternion);
     const impactRatio = Math.abs(facingDir.dot(wallNormal));
-
     if (impactRatio < 0.5) {
       speed *= (1.0 - impactRatio * 0.6);
       lateralVel.set(0, 0, 0);
-      const reflectAngle = impactRatio * 1.4;
-      const wallSide     = facingDir.clone().cross(wallNormal).y;
-      carModel.rotation.y += reflectAngle * Math.sign(wallSide);
+      carModel.rotation.y += impactRatio * 1.4 * Math.sign(facingDir.clone().cross(wallNormal).y);
     } else {
       const retention = (1.0 - (impactRatio - 0.5) * 0.8) * 0.25;
       speed = -speed * Math.max(0, retention);
-      const deflectAngle = (impactRatio - 0.5) * 1.8;
       const wallSide = facingDir.clone().cross(wallNormal).y;
-      const side = Math.abs(wallSide) > 0.01 ? Math.sign(wallSide) : 1;
-      carModel.rotation.y += deflectAngle * side;
+      carModel.rotation.y += (impactRatio - 0.5) * 1.8 * (Math.abs(wallSide) > 0.01 ? Math.sign(wallSide) : 1);
       lateralVel.set(0, 0, 0);
+      playSound('bump');
     }
-
-    const pushDist = localOffset.length() + 0.3;
-    carModel.position.addScaledVector(wallNormal, pushDist);
+    carModel.position.addScaledVector(wallNormal, localOffset.length() + 0.3);
     break;
   }
 }
 
-// ─── BUILDING ────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+// BUILDING + TRACK
+// ═══════════════════════════════════════════════════════
 let buildingModel;
 gltfLoader.load('Tower.glb', (gltf) => {
   buildingModel = gltf.scene;
   buildingModel.position.set(-60, 0, -40);
   buildingModel.scale.set(1.8, 1.8, 1.8);
-  buildingModel.traverse((child) => {
-    if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; }
-  });
+  buildingModel.traverse((c) => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
   scene.add(buildingModel);
   registerAabbModel(buildingModel);
 });
 
-// ─── TRACK ───────────────────────────────────────────────
-let trackModel;
-let finishLineBox     = null;
-let hasLeftFinishLine = false;
-
+let finishLineBox = null, hasLeftFinishLine = false;
 gltfLoader.load('Track.glb', (gltf) => {
-  trackModel = gltf.scene;
+  const trackModel = gltf.scene;
   trackModel.position.y = 0.76;
-
-  trackModel.traverse((child) => {
-    if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; }
-  });
+  trackModel.traverse((c) => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
   scene.add(trackModel);
   trackModel.updateMatrixWorld(true);
-
   const wallNode = trackModel.getObjectByName('Wall');
-  if (wallNode) {
-    wallNode.traverse((child) => {
-      if (child.isMesh) wallMeshes.push(child);
-    });
-  } else {
-    console.warn('Wall node not found in Track.glb');
-  }
-
+  if (wallNode) wallNode.traverse((c) => { if (c.isMesh) wallMeshes.push(c); });
   const finishNode = trackModel.getObjectByName('Finishline');
   if (finishNode) {
     finishLineBox = new THREE.Box3().setFromObject(finishNode);
-    finishLineBox.min.y -= 1;
-    finishLineBox.max.y += 1;
+    finishLineBox.min.y -= 1; finishLineBox.max.y += 1;
     finishNode.visible = false;
   }
 });
 
-// ─── TEXTURE HELPERS ─────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+// TEXTURE HELPER
+// ═══════════════════════════════════════════════════════
 function applyTexture(model, texture) {
   texture.flipY = false;
   model.traverse((child) => {
-    if (child.isMesh) {
-      child.material.map = texture;
-      child.material.needsUpdate = true;
-    }
+    if (child.isMesh) { child.material.map = texture; child.material.needsUpdate = true; }
   });
 }
 
-// ─── INPUT ───────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+// INPUT
+// ═══════════════════════════════════════════════════════
 const keys = {};
 window.addEventListener('keydown', (e) => keys[e.key.toLowerCase()] = true);
 window.addEventListener('keyup',   (e) => keys[e.key.toLowerCase()] = false);
 
-// ─── MOUSE LOOK ──────────────────────────────────────────
-let mouseDown = false;
-let yaw   = 0;
-let pitch = 0;
+let mouseDown = false, yaw = 0, pitch = 0;
 const sensitivity = 0.004;
-
 window.addEventListener('mousedown', () => mouseDown = true);
 window.addEventListener('mouseup',   () => mouseDown = false);
-
 window.addEventListener('mousemove', (e) => {
   if (!mouseDown) return;
   yaw   -= e.movementX * sensitivity;
@@ -515,117 +863,245 @@ window.addEventListener('mousemove', (e) => {
   pitch  = Math.max(-0.8, Math.min(0.35, pitch));
 });
 
-// ─── DRIVING PHYSICS ─────────────────────────────────────
-let speed        = 0;
-const maxSpeed      = 0.42;
-const acceleration  = 0.004;
-const friction      = 0.004;
-const turnSpeed     = 0.032;
-
-// ─── DRIFT STATE ─────────────────────────────────────────
-let lateralVel   = new THREE.Vector3(0, 0, 0);
-const DRIFT_GRIP        = 0.18;
-const DRIFT_GRIP_SLIDE  = 0.04;
-const DRIFT_BUILDUP     = 0.035;
-const DRIFT_TURN_BOOST  = 1.5;
-const NATURAL_BLEED     = 0.012;
-const DRIFT_FRICTION    = 0.0015;
-
-// ─── CAMERA OFFSETS ──────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+// PHYSICS CONSTANTS
+// ═══════════════════════════════════════════════════════
+let speed = 0;
+const maxSpeed = 0.42, acceleration = 0.004, friction = 0.004, turnSpeed = 0.032;
+let lateralVel = new THREE.Vector3();
+const DRIFT_GRIP = 0.18, DRIFT_GRIP_SLIDE = 0.04, DRIFT_BUILDUP = 0.035;
+const DRIFT_TURN_BOOST = 1.5, NATURAL_BLEED = 0.012, DRIFT_FRICTION = 0.0015;
 const baseOffset = new THREE.Vector3(0, 3, 8);
 const lookOffset = new THREE.Vector3(0, 1, 0);
 const smoothedCarPos = new THREE.Vector3();
-
 const _spinAxis = new THREE.Vector3(1, 0, 0);
 const _spinQ = new THREE.Quaternion();
+let steerRate = 0;
+const STEER_BUILDUP = 0.14, STEER_FALLOFF = 0.18;
 
-// ─── LAP TIMER ───────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+// LAP TIMER
+// ═══════════════════════════════════════════════════════
 const currentLapEl = document.getElementById('currentLap');
 const bestLapEl    = document.getElementById('bestLap');
-
-let lapStartTime  = null;
-let bestLapMs     = null;
-
+let lapStartTime = null, bestLapMs = null;
 const checkpointBox = new THREE.Box3(
-  new THREE.Vector3(-148, -2, 16),
-  new THREE.Vector3( -94,  4, 37)
+  new THREE.Vector3(-148,-2,16), new THREE.Vector3(-94,4,37)
 );
 let checkpointCleared = false;
 
 function formatTime(ms) {
-  const m   = Math.floor(ms / 60000);
-  const s   = Math.floor((ms % 60000) / 1000);
-  const mil = Math.floor(ms % 1000);
+  const m = Math.floor(ms/60000), s = Math.floor((ms%60000)/1000), mil = Math.floor(ms%1000);
   return `${m}:${String(s).padStart(2,'0')}.${String(mil).padStart(3,'0')}`;
 }
-
 function updateLapTimer() {
   if (lapStartTime === null) return;
   currentLapEl.textContent = formatTime(performance.now() - lapStartTime);
 }
 
-// ─── STEERING STATE ──────────────────────────────────────
-let steerRate = 0;
-const STEER_BUILDUP  = 0.14;
-const STEER_FALLOFF  = 0.18;
+// ═══════════════════════════════════════════════════════
+// SOUND
+// ═══════════════════════════════════════════════════════
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+let engineGain, engineOsc;
+let soundUnlocked = false;
 
-// ─── DELTA TIME ──────────────────────────────────────────
+function initSound() {
+  if (soundUnlocked) return;
+  soundUnlocked = true;
+
+  // Engine: oscillator with gain, pitch scales with speed
+  engineOsc  = audioCtx.createOscillator();
+  engineGain = audioCtx.createGain();
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 400;
+  engineOsc.type = 'sawtooth';
+  engineOsc.frequency.value = 60;
+  engineOsc.connect(filter);
+  filter.connect(engineGain);
+  engineGain.connect(audioCtx.destination);
+  engineGain.gain.value = 0;
+  engineOsc.start();
+}
+
+function updateEngineSound(spd, isDrifting) {
+  if (!soundUnlocked) return;
+  const absSpd   = Math.abs(spd);
+  const normSpd  = absSpd / maxSpeed;
+  const targetHz = 55 + normSpd * 120 + (isDrifting ? 30 : 0);
+  const targetGain = normSpd * 0.04 + 0.008;
+  engineOsc.frequency.setTargetAtTime(targetHz,  audioCtx.currentTime, 0.05);
+  engineGain.gain.setTargetAtTime(targetGain, audioCtx.currentTime, 0.05);
+}
+
+function playSound(type) {
+  if (!soundUnlocked) return;
+  const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.15, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  if (type === 'bump') {
+    for (let i = 0; i < data.length; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i/data.length, 2) * 0.25;
+    }
+  } else if (type === 'lap') {
+    // Short ascending two-tone chime
+    const sr = audioCtx.sampleRate;
+    for (let i = 0; i < data.length; i++) {
+      const t   = i / sr;
+      const env = Math.pow(1 - i/data.length, 0.5);
+      data[i]   = Math.sin(2*Math.PI*880*t) * env * 0.12
+                + Math.sin(2*Math.PI*1320*t) * env * 0.08;
+    }
+  }
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  src.connect(audioCtx.destination);
+  src.start();
+}
+
+let driftSoundNode = null;
+function updateDriftSound(isDrifting) {
+  if (!soundUnlocked) return;
+  if (isDrifting && !driftSoundNode) {
+    const buf = audioCtx.createBuffer(1, audioCtx.sampleRate, audioCtx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random()*2-1)*0.08;
+    driftSoundNode = audioCtx.createBufferSource();
+    driftSoundNode.buffer = buf;
+    driftSoundNode.loop = true;
+    const g = audioCtx.createGain(); g.gain.value = 0.18;
+    const f = audioCtx.createBiquadFilter(); f.type='bandpass'; f.frequency.value=1200; f.Q.value=0.8;
+    driftSoundNode.connect(f); f.connect(g); g.connect(audioCtx.destination);
+    driftSoundNode.start();
+  } else if (!isDrifting && driftSoundNode) {
+    driftSoundNode.stop();
+    driftSoundNode = null;
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// SUBMIT MODAL
+// ═══════════════════════════════════════════════════════
+const submitModal   = document.getElementById('submitModal');
+const submitPreview = document.getElementById('submitPreview');
+const submitName    = document.getElementById('submitName');
+const submitEmail   = document.getElementById('submitEmail');
+const submitError   = document.getElementById('submitError');
+let pendingLapMs = null;
+
+function showSubmitModal(lapMs) {
+  pendingLapMs = lapMs;
+  submitName.value  = '';
+  submitEmail.value = '';
+  submitError.style.display = 'none';
+  submitPreview.src = carTextureDataUrl || 'placeholdercartexture.png';
+  submitModal.classList.remove('hidden');
+}
+
+document.getElementById('submitCancel').addEventListener('click', () => {
+  submitModal.classList.add('hidden');
+});
+
+document.getElementById('submitConfirm').addEventListener('click', async () => {
+  const name  = submitName.value.trim();
+  const email = submitEmail.value.trim();
+  if (!name || !email || !email.includes('@')) {
+    submitError.textContent = 'Please fill in both fields with a valid email.';
+    submitError.style.display = 'block';
+    return;
+  }
+
+  const entry = {
+    id:             Date.now(),
+    name:           name,
+    email:          email,
+    time:           formatTime(pendingLapMs),
+    timeMs:         pendingLapMs,
+    textureDataUrl: carTextureDataUrl || null,
+    approved:       false,
+    submittedAt:    new Date().toISOString(),
+    ghostFrames:    currentLapGhostFrames.slice()
+  };
+
+  // Insert sorted by timeMs
+  lbEntries.push(entry);
+  lbEntries.sort((a, b) => a.timeMs - b.timeMs);
+  // Keep only top MAX_ENTRIES, but preserve approved textures for top 3
+  // Trim entries beyond MAX_ENTRIES
+  if (lbEntries.length > MAX_ENTRIES) lbEntries = lbEntries.slice(0, MAX_ENTRIES);
+
+  await saveLeaderboard();
+  renderLeaderboard();
+  submitModal.classList.add('hidden');
+});
+
+// ═══════════════════════════════════════════════════════
+// DELTA TIME
+// ═══════════════════════════════════════════════════════
 let lastTime = null;
 
+// Ghost recording for current lap
+let currentLapGhostFrames = [];
+let ghostPlaybackPBFrame  = 0;
+let ghostPlaybackCRFrame  = 0;
+let ghostsInitialized     = false;
+
+// ═══════════════════════════════════════════════════════
+// ANIMATE
+// ═══════════════════════════════════════════════════════
 function animate() {
   requestAnimationFrame(animate);
 
   const now   = performance.now();
-  const delta = lastTime === null
-    ? 1
-    : Math.min((now - lastTime) / (1000 / 60), 3);
+  const delta = lastTime === null ? 1 : Math.min((now - lastTime) / (1000/60), 3);
   lastTime = now;
+
+  // Init ghosts once car is loaded
+  if (carModel && !ghostsInitialized) {
+    ghostsInitialized = true;
+    initGhosts();
+    // Load class record ghost from storage
+    loadClassRecordGhost().then(frames => {
+      if (frames) crGhostFrames = frames;
+    });
+    loadLeaderboard();
+  }
 
   if (carModel && carTextureApplied) {
 
-    // ── Acceleration & friction ─────────────────────────
-    if (keys['w']) {
-      speed += acceleration * delta;
-    } else if (keys['s']) {
-      speed -= acceleration * delta;
-    } else {
+    // ── Acceleration & friction ──────────────────────
+    if (keys['w'])      speed += acceleration * delta;
+    else if (keys['s']) speed -= acceleration * delta;
+    else {
       if      (speed >  friction * delta) speed -= friction * delta;
       else if (speed < -friction * delta) speed += friction * delta;
       else speed = 0;
     }
     speed = Math.max(-maxSpeed, Math.min(maxSpeed, speed));
 
-    // ── Drift logic ─────────────────────────────────────
+    // ── Drift ────────────────────────────────────────
     const isDrifting  = keys[' '] && Math.abs(speed) > maxSpeed * 0.3;
     const speedFactor = Math.min(Math.abs(speed) / maxSpeed, 1);
     const turnDir     = speed < 0 ? -1 : 1;
-
-    const activeTurnSpeed = isDrifting
-      ? turnSpeed * DRIFT_TURN_BOOST
-      : turnSpeed;
-
+    const activeTurnSpeed = isDrifting ? turnSpeed * DRIFT_TURN_BOOST : turnSpeed;
     const steerInput  = (keys['a'] ? 1 : 0) - (keys['d'] ? 1 : 0);
     const steerTarget = steerInput * activeTurnSpeed * speedFactor * turnDir;
     steerRate += (steerTarget - steerRate) * (steerInput !== 0 ? STEER_BUILDUP : STEER_FALLOFF) * delta;
     carModel.rotation.y += steerRate * delta;
 
-    const facingDir = new THREE.Vector3(0, 0, -1)
-      .applyQuaternion(carModel.quaternion);
-
+    const facingDir  = new THREE.Vector3(0,0,-1).applyQuaternion(carModel.quaternion);
     const forwardVel = facingDir.clone().multiplyScalar(speed);
 
     if (isDrifting) {
-      const rightDir = new THREE.Vector3(1, 0, 0).applyQuaternion(carModel.quaternion);
+      const rightDir = new THREE.Vector3(1,0,0).applyQuaternion(carModel.quaternion);
       lateralVel.addScaledVector(rightDir, steerInput * DRIFT_BUILDUP * speedFactor * delta);
-
       const maxLateral = Math.abs(speed) * 0.9;
       if (lateralVel.length() > maxLateral) lateralVel.setLength(maxLateral);
-
       lateralVel.multiplyScalar(1 - DRIFT_GRIP_SLIDE * delta);
       speed *= (1 - DRIFT_FRICTION * delta);
     } else {
       if (steerInput !== 0 && Math.abs(speed) > maxSpeed * 0.2) {
-        const rightDir = new THREE.Vector3(1, 0, 0).applyQuaternion(carModel.quaternion);
+        const rightDir = new THREE.Vector3(1,0,0).applyQuaternion(carModel.quaternion);
         lateralVel.addScaledVector(rightDir, steerInput * NATURAL_BLEED * speedFactor * delta);
       }
       lateralVel.multiplyScalar(1 - DRIFT_GRIP * delta);
@@ -635,12 +1111,47 @@ function animate() {
     totalVel.y = 0;
     carModel.position.add(totalVel);
 
-    // ── Collisions ──────────────────────────────────────
+    updateEngineSound(speed, isDrifting);
+    updateDriftSound(isDrifting);
+
+    // ── Collisions ───────────────────────────────────
     updateAabbObstacles();
     resolveAabb();
     resolveWallRaycasts();
 
-    // ── Lap timer & checkpoint ───────────────────────────
+    // ── Speedometer ──────────────────────────────────
+    const normSpd = Math.abs(speed) / maxSpeed;
+    document.getElementById('speedFill').style.width = (normSpd * 100) + '%';
+    document.getElementById('speedVal').textContent  = Math.round(normSpd * 120);
+
+    // ── Ghost recording ───────────────────────────────
+    if (lapStartTime !== null) {
+      currentLapGhostFrames.push({
+        px: carModel.position.x, py: carModel.position.y, pz: carModel.position.z,
+        qx: carModel.quaternion.x, qy: carModel.quaternion.y,
+        qz: carModel.quaternion.z, qw: carModel.quaternion.w
+      });
+    }
+
+    // ── Ghost playback ────────────────────────────────
+    if (pbGhostMesh) {
+      const show = ghostPBCheckbox.checked && pbGhostFrames.length > 0 && lapStartTime !== null;
+      pbGhostMesh.visible = show;
+      if (show) {
+        updateGhost(pbGhostMesh, pbGhostFrames, ghostPlaybackPBFrame);
+        ghostPlaybackPBFrame = Math.min(ghostPlaybackPBFrame + 1, pbGhostFrames.length - 1);
+      }
+    }
+    if (crGhostMesh) {
+      const show = ghostCRCheckbox.checked && crGhostFrames.length > 0 && lapStartTime !== null;
+      crGhostMesh.visible = show;
+      if (show) {
+        updateGhost(crGhostMesh, crGhostFrames, ghostPlaybackCRFrame);
+        ghostPlaybackCRFrame = Math.min(ghostPlaybackCRFrame + 1, crGhostFrames.length - 1);
+      }
+    }
+
+    // ── Lap timer & checkpoint ────────────────────────
     if (finishLineBox || checkpointBox) {
       _carBox.setFromObject(carModel);
 
@@ -648,55 +1159,72 @@ function animate() {
         lapStartTime = performance.now();
         hasLeftFinishLine = false;
         checkpointCleared = false;
+        currentLapGhostFrames = [];
+        ghostPlaybackPBFrame  = 0;
+        ghostPlaybackCRFrame  = 0;
       }
 
       if (lapStartTime !== null) {
-        if (!checkpointCleared && _carBox.intersectsBox(checkpointBox)) {
-          checkpointCleared = true;
-        }
+        if (!checkpointCleared && _carBox.intersectsBox(checkpointBox)) checkpointCleared = true;
 
         if (finishLineBox && _carBox.intersectsBox(finishLineBox)) {
           if (hasLeftFinishLine && checkpointCleared && speed > 0) {
             const lapMs = performance.now() - lapStartTime;
+
+            // Personal best ghost
             if (bestLapMs === null || lapMs < bestLapMs) {
               bestLapMs = lapMs;
               bestLapEl.textContent = formatTime(bestLapMs);
-              bestLapEl.style.color = '#007700';
-              setTimeout(() => bestLapEl.style.color = '#222', 1500);
+              bestLapEl.style.color = '#7ef';
+              setTimeout(() => bestLapEl.style.color = '', 1500);
+              pbGhostFrames = currentLapGhostFrames.slice();
+
+              // Check if this is also the class record
+              const classRecord = lbEntries.length > 0 ? lbEntries[0].timeMs : Infinity;
+              if (lapMs < classRecord) {
+                crGhostFrames = currentLapGhostFrames.slice();
+                saveClassRecordGhost(crGhostFrames);
+              }
             }
+
+            playSound('lap');
+
+            // Leaderboard submission prompt
+            if (isTop3(lapMs)) {
+              showSubmitModal(lapMs);
+            }
+
             lapStartTime      = performance.now();
             hasLeftFinishLine = false;
             checkpointCleared = false;
+            currentLapGhostFrames = [];
+            ghostPlaybackPBFrame  = 0;
+            ghostPlaybackCRFrame  = 0;
           }
         } else {
           hasLeftFinishLine = true;
         }
-
         updateLapTimer();
       }
     }
 
-    // ── Front wheel: steer + spin ───────────────────────
+    // ── Wheels ───────────────────────────────────────
     if (frontWheelPivot) {
       let steerTarget = 0;
       if (keys['a']) steerTarget =  maxWheelSteer;
       if (keys['d']) steerTarget = -maxWheelSteer;
       if (isDrifting) steerTarget *= 1.5;
-
       wheelSteer += (steerTarget - wheelSteer) * 0.15 * delta;
       frontWheelPivot.rotation.y = wheelSteer;
-
       _spinQ.setFromAxisAngle(_spinAxis, -speed * wheelSpinFactor * delta);
       frontWheelSpinner.quaternion.premultiply(_spinQ);
     }
-
-    // ── Back wheel: spin only ───────────────────────────
     if (backWheelSpinner) {
       _spinQ.setFromAxisAngle(_spinAxis, -speed * wheelSpinFactor * delta);
       backWheelSpinner.quaternion.premultiply(_spinQ);
     }
 
-    // ── Camera follow ───────────────────────────────────
+    // ── Camera ───────────────────────────────────────
     smoothedCarPos.lerp(carModel.position, 0.15 * delta);
     const rot    = new THREE.Euler(pitch, yaw, 0, 'YXZ');
     const offset = baseOffset.clone().applyEuler(rot).applyQuaternion(carModel.quaternion);
@@ -709,132 +1237,120 @@ function animate() {
 
 animate();
 
-// ─── RESIZE ──────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+// RESIZE
+// ═══════════════════════════════════════════════════════
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// ─── TEXTURE UPLOADS ─────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+// TEXTURE UPLOADS
+// ═══════════════════════════════════════════════════════
 document.getElementById('carTextureUpload').addEventListener('change', (e) => {
   if (!carModel) return;
-  textureLoader.load(URL.createObjectURL(e.target.files[0]), (tex) => {
+  const file = e.target.files[0];
+  const url  = URL.createObjectURL(file);
+  textureLoader.load(url, (tex) => {
     applyTexture(carModel, tex);
     if (!carTextureApplied) {
       carTextureApplied = true;
       lockOverlay.style.display = 'none';
+      initSound();
     }
+    // Capture a small data URL for leaderboard use
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = 128; c.height = 128;
+      c.getContext('2d').drawImage(img, 0, 0, 128, 128);
+      carTextureDataUrl = c.toDataURL('image/jpeg', 0.7);
+    };
+    img.src = url;
   });
 });
 
 document.getElementById('buildingTextureUpload').addEventListener('change', (e) => {
   if (!buildingModel) return;
-  textureLoader.load(URL.createObjectURL(e.target.files[0]),
-    (tex) => applyTexture(buildingModel, tex));
+  textureLoader.load(URL.createObjectURL(e.target.files[0]), (tex) => applyTexture(buildingModel, tex));
 });
-
 document.getElementById('skyboxUpload').addEventListener('change', (e) => {
   textureLoader.load(URL.createObjectURL(e.target.files[0]), (tex) => {
     tex.mapping = THREE.EquirectangularReflectionMapping;
     scene.background = tex;
   });
 });
-
 document.getElementById('groundUpload').addEventListener('change', (e) => {
   textureLoader.load(URL.createObjectURL(e.target.files[0]), (tex) => {
-    tex.wrapS = THREE.RepeatWrapping;
-    tex.wrapT = THREE.RepeatWrapping;
+    tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
     tex.repeat.set(300, 300);
-    groundMaterial.map = tex;
-    groundMaterial.needsUpdate = true;
+    groundMaterial.map = tex; groundMaterial.needsUpdate = true;
   });
 });
 
-// ─── COLOR CONTROLS ──────────────────────────────────────
-document.getElementById('ambientColor').addEventListener('input', (e) => {
-  ambientLight.color.set(e.target.value);
-});
-
-document.getElementById('lightColor').addEventListener('input', (e) => {
-  directionalLight.color.set(e.target.value);
-});
-
+// ═══════════════════════════════════════════════════════
+// COLOR CONTROLS
+// ═══════════════════════════════════════════════════════
+document.getElementById('ambientColor').addEventListener('input', (e) => ambientLight.color.set(e.target.value));
+document.getElementById('lightColor').addEventListener('input',   (e) => directionalLight.color.set(e.target.value));
 document.getElementById('fogColor').addEventListener('input', (e) => {
   scene.fog.color.set(e.target.value);
-  // Keep the renderer's clear colour in sync so the sky beyond the fog
-  // distance matches — otherwise a thin strip of black appears at the horizon.
   renderer.setClearColor(e.target.value);
 });
 
-// ─── SCREENSHOT ──────────────────────────────────────────
+// ═══════════════════════════════════════════════════════
+// QoL BUTTONS
+// ═══════════════════════════════════════════════════════
+document.getElementById('resetBtn').addEventListener('click', resetCar);
+
+document.getElementById('fullscreenBtn').addEventListener('click', () => {
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+  else document.exitFullscreen();
+});
+
 document.getElementById('screenshotBtn').addEventListener('click', () => {
   renderer.render(scene, camera);
-
   const gl = renderer.domElement;
-  const w  = gl.width;
-  const h  = gl.height;
-
   const composite = document.createElement('canvas');
-  composite.width  = w;
-  composite.height = h;
+  composite.width = gl.width; composite.height = gl.height;
   const ctx = composite.getContext('2d');
-
   ctx.drawImage(gl, 0, 0);
-
-  const bestText = bestLapMs !== null
-    ? `Best Lap  ${formatTime(bestLapMs)}`
-    : 'Best Lap  --:--.---';
-
-  const padding   = Math.round(w * 0.018);
-  const fontSize  = Math.round(w * 0.022);
-  const lineH     = fontSize + Math.round(fontSize * 0.5);
-  const boxPad    = Math.round(fontSize * 0.55);
-
+  const w = gl.width;
+  const bestText = bestLapMs !== null ? `Best Lap  ${formatTime(bestLapMs)}` : 'Best Lap  --:--.---';
+  const padding = Math.round(w*0.018), fontSize = Math.round(w*0.022);
+  const lineH = fontSize + Math.round(fontSize*0.5), boxPad = Math.round(fontSize*0.55);
   ctx.font = `bold ${fontSize}px Arial, sans-serif`;
   ctx.textBaseline = 'top';
-
   const textW = ctx.measureText(bestText).width;
-  const boxX  = padding;
-  const boxY  = padding;
-  const boxW  = textW + boxPad * 2;
-  const boxH  = lineH + boxPad * 1.2;
-
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
-  const r = Math.round(boxH * 0.35);
+  const boxW = textW + boxPad*2, boxH = lineH + boxPad*1.2;
+  const r = Math.round(boxH*0.35);
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
   ctx.beginPath();
-  ctx.moveTo(boxX + r, boxY);
-  ctx.lineTo(boxX + boxW - r, boxY);
-  ctx.quadraticCurveTo(boxX + boxW, boxY, boxX + boxW, boxY + r);
-  ctx.lineTo(boxX + boxW, boxY + boxH - r);
-  ctx.quadraticCurveTo(boxX + boxW, boxY + boxH, boxX + boxW - r, boxY + boxH);
-  ctx.lineTo(boxX + r, boxY + boxH);
-  ctx.quadraticCurveTo(boxX, boxY + boxH, boxX, boxY + boxH - r);
-  ctx.lineTo(boxX, boxY + r);
-  ctx.quadraticCurveTo(boxX, boxY, boxX + r, boxY);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-
-  ctx.shadowColor   = 'rgba(0,0,0,0.8)';
-  ctx.shadowBlur    = 6;
-  ctx.shadowOffsetX = 1;
-  ctx.shadowOffsetY = 1;
-
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText(bestText, boxX + boxPad, boxY + boxPad * 0.6);
-
-  ctx.shadowColor = 'transparent';
-  ctx.shadowBlur  = 0;
-
+  ctx.moveTo(padding+r,padding);
+  ctx.lineTo(padding+boxW-r,padding);
+  ctx.quadraticCurveTo(padding+boxW,padding,padding+boxW,padding+r);
+  ctx.lineTo(padding+boxW,padding+boxH-r);
+  ctx.quadraticCurveTo(padding+boxW,padding+boxH,padding+boxW-r,padding+boxH);
+  ctx.lineTo(padding+r,padding+boxH);
+  ctx.quadraticCurveTo(padding,padding+boxH,padding,padding+boxH-r);
+  ctx.lineTo(padding,padding+r);
+  ctx.quadraticCurveTo(padding,padding,padding+r,padding);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,0.25)'; ctx.lineWidth=1.5; ctx.stroke();
+  ctx.shadowColor='rgba(0,0,0,0.8)'; ctx.shadowBlur=6; ctx.shadowOffsetX=1; ctx.shadowOffsetY=1;
+  ctx.fillStyle='#fff';
+  ctx.fillText(bestText, padding+boxPad, padding+boxPad*0.6);
+  ctx.shadowColor='transparent'; ctx.shadowBlur=0;
   const link = document.createElement('a');
   link.download = 'screenshot.png';
   link.href = composite.toDataURL('image/png');
   link.click();
 });
+
+// Prevent spacebar from scrolling
+window.addEventListener('keydown', (e) => { if (e.key === ' ') e.preventDefault(); });
 </script>
 </body>
 </html>
