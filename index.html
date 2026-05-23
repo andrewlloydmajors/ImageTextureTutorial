@@ -1101,9 +1101,9 @@ function animate() {
   }
 
   if(carModel && carTextureApplied) {
-    // Record the pre-tick state for interpolation
-    const prevPos  = carModel.position.clone();
-    const prevQuat = carModel.quaternion.clone();
+    // Record the pre-tick position for interpolation
+    const prevPos = carModel.position.clone();
+    const prevYaw = carYaw;
 
     // Run all due physics ticks
     while(physicsAccum >= PHYSICS_STEP) {
@@ -1112,32 +1112,28 @@ function animate() {
     }
 
     // Store the true post-tick state
-    const postPos  = carModel.position.clone();
-    const postQuat = carModel.quaternion.clone();
+    const postPos = carModel.position.clone();
+    const postYaw = carYaw;
 
-    // Interpolate the visual position between prev and post by how far
-    // we are through the current tick interval. This eliminates jitter
-    // between ticks without affecting the deterministic physics.
-    const alpha     = physicsAccum / PHYSICS_STEP;
-    const renderPos = prevPos.clone().lerp(postPos, alpha);
-    const renderQuat = prevQuat.clone().slerp(postQuat, alpha);
+    // Interpolate position and yaw between the last two physics states.
+    // We only lerp position and the yaw angle — never touch the quaternion
+    // directly, which eliminates the Euler/quaternion round-trip drift.
+    const alpha      = physicsAccum / PHYSICS_STEP;
+    const renderPos  = prevPos.clone().lerp(postPos, alpha);
+    const renderYaw  = prevYaw + (postYaw - prevYaw) * alpha;
 
-    // Apply interpolated transform to mesh for this frame only
+    // Apply interpolated transform to mesh for this render frame
     carModel.position.copy(renderPos);
-    carModel.quaternion.copy(renderQuat);
+    carModel.rotation.set(0, renderYaw, 0, 'YXZ');
 
     // Speedometer
     const ns = Math.abs(speed) / maxSpeed;
     document.getElementById('speedFill').style.width = (ns * 100) + '%';
     document.getElementById('speedVal').textContent  = Math.round(ns * 120);
 
-    // Camera — use a smoothed yaw for the car's facing so the camera
-    // doesn't snap when the interpolated quaternion has tiny discontinuities.
-    // We lerp smoothedCarPos and camera.position rather than copying directly.
+    // Camera
     smoothedCarPos.lerp(renderPos, 0.15);
     const rot    = new THREE.Euler(pitch, yaw, 0, 'YXZ');
-    // Derive offset from carYaw (the stable physics angle) instead of renderQuat
-    // so turning never feeds jitter into the camera offset direction.
     const carFacingQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, carYaw, 0, 'YXZ'));
     const offset = baseOffset.clone().applyEuler(rot).applyQuaternion(carFacingQuat);
     camera.position.lerp(smoothedCarPos.clone().add(offset), 0.12);
@@ -1147,7 +1143,7 @@ function animate() {
 
     // Restore true physics state so the next tick starts correctly
     carModel.position.copy(postPos);
-    carModel.quaternion.copy(postQuat);
+    carModel.rotation.set(0, postYaw, 0, 'YXZ');
   } else {
     renderer.render(scene, camera);
   }
