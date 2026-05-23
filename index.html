@@ -513,6 +513,12 @@ function isTop3(timeMs) {
   return timeMs < lbEntries[2].timeMs;
 }
 
+// Returns true if this time is better than the player's existing entry (or they have none)
+function isBetterThanOwn(email, timeMs) {
+  const existing = lbEntries.find(e => e.email.toLowerCase() === email.toLowerCase());
+  return !existing || timeMs < existing.timeMs;
+}
+
 // ═══════════════════════════════════════════════════════
 // RECORD GHOST STORAGE
 // ═══════════════════════════════════════════════════════
@@ -911,12 +917,64 @@ function updateDriftSound(isDrifting) {
 const submitModal=document.getElementById('submitModal');
 let pendingLapMs=null;
 
+// Session memory — persists for the browser tab's lifetime.
+// Stores { name, email } so returning top-3 laps skip the modal
+// and silently update the existing entry if faster.
+let sessionSubmission = null;
+try {
+  const saved = sessionStorage.getItem('tmcSubmission');
+  if(saved) sessionSubmission = JSON.parse(saved);
+} catch(e) {}
+
+async function upsertLeaderboardEntry(name, email, lapMs) {
+  // Re-read fresh from Firestore to avoid race conditions with other students
+  const fresh = await fbGet(LB_DOC);
+  lbEntries = fresh ? (fresh.entries||[]) : [];
+
+  const existingIdx = lbEntries.findIndex(e => e.email.toLowerCase() === email.toLowerCase());
+
+  if(existingIdx !== -1) {
+    // Only update if this lap is faster than their current entry
+    if(lapMs >= lbEntries[existingIdx].timeMs) return;
+    // Preserve approved state and original id so moderation isn't lost
+    lbEntries[existingIdx] = {
+      ...lbEntries[existingIdx],
+      time:           formatTime(lapMs),
+      timeMs:         lapMs,
+      textureDataUrl: carTextureDataUrl || lbEntries[existingIdx].textureDataUrl,
+      submittedAt:    new Date().toISOString(),
+    };
+  } else {
+    lbEntries.push({
+      id:             Date.now(),
+      name, email,
+      time:           formatTime(lapMs),
+      timeMs:         lapMs,
+      textureDataUrl: carTextureDataUrl||null,
+      approved:       false,
+      submittedAt:    new Date().toISOString(),
+    });
+  }
+
+  lbEntries.sort((a,b) => a.timeMs - b.timeMs);
+  if(lbEntries.length > MAX_ENTRIES) lbEntries = lbEntries.slice(0, MAX_ENTRIES);
+  await saveLeaderboard();
+}
+
 function showSubmitModal(lapMs) {
-  pendingLapMs=lapMs;
-  document.getElementById('submitName').value='';
-  document.getElementById('submitEmail').value='';
-  document.getElementById('submitError').style.display='none';
-  document.getElementById('submitPreview').src=carTextureDataUrl||'placeholdercartexture.png';
+  pendingLapMs = lapMs;
+
+  // If they've already submitted this session, silently update — no modal needed
+  if(sessionSubmission) {
+    upsertLeaderboardEntry(sessionSubmission.name, sessionSubmission.email, lapMs);
+    return;
+  }
+
+  // Pre-fill name/email if we have session data (shouldn't reach here if set, but safe)
+  document.getElementById('submitName').value  = '';
+  document.getElementById('submitEmail').value = '';
+  document.getElementById('submitError').style.display = 'none';
+  document.getElementById('submitPreview').src = carTextureDataUrl||'placeholdercartexture.png';
   submitModal.classList.remove('hidden');
 }
 
@@ -928,22 +986,12 @@ document.getElementById('submitConfirm').addEventListener('click', async ()=>{
   if(!name || !email || !email.includes('@')) {
     document.getElementById('submitError').style.display='block'; return;
   }
-  const entry = {
-    id:             Date.now(),
-    name, email,
-    time:           formatTime(pendingLapMs),
-    timeMs:         pendingLapMs,
-    textureDataUrl: carTextureDataUrl||null,
-    approved:       false,
-    submittedAt:    new Date().toISOString(),
-  };
-  // Re-read latest from Firestore before inserting to avoid race conditions
-  const fresh = await fbGet(LB_DOC);
-  lbEntries = fresh ? (fresh.entries||[]) : [];
-  lbEntries.push(entry);
-  lbEntries.sort((a,b)=>a.timeMs-b.timeMs);
-  if(lbEntries.length>MAX_ENTRIES) lbEntries=lbEntries.slice(0,MAX_ENTRIES);
-  await saveLeaderboard();
+
+  // Save to session so future top-3 laps skip the modal
+  sessionSubmission = { name, email };
+  try { sessionStorage.setItem('tmcSubmission', JSON.stringify(sessionSubmission)); } catch(e) {}
+
+  await upsertLeaderboardEntry(name, email, pendingLapMs);
   submitModal.classList.add('hidden');
 });
 
@@ -1059,7 +1107,11 @@ function physicsTick() {
             if(lapMs < topMs) { crGhostFrames = currentLapGhostFrames.slice(); saveRecordGhost(crGhostFrames); }
           }
           playSound('lap');
-          if(isTop3(lapMs)) showSubmitModal(lapMs);
+          // Show modal (or silently update) only if this time is top-3
+          // AND better than their own existing entry
+          const qualifies = isTop3(lapMs) &&
+            (!sessionSubmission || isBetterThanOwn(sessionSubmission.email, lapMs));
+          if(qualifies) showSubmitModal(lapMs);
           lapStartTime = performance.now(); hasLeftFinishLine = false; checkpointCleared = false;
           currentLapGhostFrames = []; ghostPlaybackPBFrame = 0; ghostPlaybackCRFrame = 0;
         }
