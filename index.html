@@ -1076,7 +1076,7 @@ function animate() {
 
   const now = performance.now();
   if(lastTime === null) lastTime = now;
-  physicsAccum += Math.min(now - lastTime, 100); // cap at 100ms to avoid spiral of death
+  physicsAccum += Math.min(now - lastTime, 100);
   lastTime = now;
 
   if(carModel && !ghostsInitialized) {
@@ -1086,27 +1086,52 @@ function animate() {
     loadLeaderboard();
   }
 
-  // Run as many fixed physics ticks as time has accumulated
   if(carModel && carTextureApplied) {
+    // Record the pre-tick state for interpolation
+    const prevPos  = carModel.position.clone();
+    const prevQuat = carModel.quaternion.clone();
+
+    // Run all due physics ticks
     while(physicsAccum >= PHYSICS_STEP) {
       physicsTick();
       physicsAccum -= PHYSICS_STEP;
     }
 
-    // Speedometer updates every render frame (cosmetic only, doesn't affect physics)
+    // Store the true post-tick state
+    const postPos  = carModel.position.clone();
+    const postQuat = carModel.quaternion.clone();
+
+    // Interpolate the visual position between prev and post by how far
+    // we are through the current tick interval. This eliminates jitter
+    // between ticks without affecting the deterministic physics.
+    const alpha     = physicsAccum / PHYSICS_STEP;
+    const renderPos = prevPos.clone().lerp(postPos, alpha);
+    const renderQuat = prevQuat.clone().slerp(postQuat, alpha);
+
+    // Apply interpolated transform to mesh for this frame only
+    carModel.position.copy(renderPos);
+    carModel.quaternion.copy(renderQuat);
+
+    // Speedometer
     const ns = Math.abs(speed) / maxSpeed;
     document.getElementById('speedFill').style.width = (ns * 100) + '%';
     document.getElementById('speedVal').textContent  = Math.round(ns * 120);
 
-    // Camera follows the car — updated every render frame for smoothness
-    smoothedCarPos.lerp(carModel.position, 0.15);
+    // Camera
+    smoothedCarPos.lerp(renderPos, 0.3);
     const rot    = new THREE.Euler(pitch, yaw, 0, 'YXZ');
-    const offset = baseOffset.clone().applyEuler(rot).applyQuaternion(carModel.quaternion);
-    camera.position.lerp(smoothedCarPos.clone().add(offset), 0.12);
+    const offset = baseOffset.clone().applyEuler(rot).applyQuaternion(renderQuat);
+    camera.position.copy(smoothedCarPos.clone().add(offset));
     camera.lookAt(smoothedCarPos.clone().add(lookOffset));
-  }
 
-  renderer.render(scene, camera);
+    renderer.render(scene, camera);
+
+    // Restore true physics state so the next tick starts correctly
+    carModel.position.copy(postPos);
+    carModel.quaternion.copy(postQuat);
+  } else {
+    renderer.render(scene, camera);
+  }
 }
 animate();
 
