@@ -1087,6 +1087,60 @@ window.addEventListener('resize',()=>{
 // ═══════════════════════════════════════════════════════
 // TEXTURE UPLOADS
 // ═══════════════════════════════════════════════════════
+function captureCarThumbnail() {
+  // Render a single frame of the car at a 3/4 angle into a small offscreen canvas.
+  // We temporarily reposition the camera, render once, then restore everything.
+  // Cost: one extra render call, done only when the texture changes.
+  const THUMB = 128;
+
+  // Save current camera state
+  const savedPos   = camera.position.clone();
+  const savedQuat  = camera.quaternion.clone();
+  const savedAspect = camera.aspect;
+
+  // Hide ghosts and ground for the thumbnail so it's just the car
+  if (pbGhostMesh) pbGhostMesh.visible = false;
+  if (crGhostMesh) crGhostMesh.visible = false;
+  ground.visible = false;
+  scene.background = null;
+  const savedFog = scene.fog;
+  scene.fog = null;
+
+  // Position camera at a 3/4 angle: slightly above, front-right of the car
+  const carPos = carModel.position;
+  const thumbCam = new THREE.PerspectiveCamera(40, 1, 0.1, 1000);
+  const offset = new THREE.Vector3(3.5, 2.2, -3.8)
+    .applyQuaternion(carModel.quaternion)
+    .add(carPos);
+  thumbCam.position.copy(offset);
+  thumbCam.lookAt(carPos.clone().add(new THREE.Vector3(0, 0.5, 0)));
+
+  // Render into a small offscreen canvas via the existing renderer
+  renderer.setSize(THUMB, THUMB, false);
+  renderer.render(scene, thumbCam);
+
+  // Grab the pixels
+  const offscreen = document.createElement('canvas');
+  offscreen.width = offscreen.height = THUMB;
+  offscreen.getContext('2d').drawImage(renderer.domElement, 0, 0, THUMB, THUMB);
+  carTextureDataUrl = offscreen.toDataURL('image/jpeg', 0.82);
+
+  // Restore everything
+  renderer.setSize(window.innerWidth, window.innerHeight, false);
+  camera.position.copy(savedPos);
+  camera.quaternion.copy(savedQuat);
+  camera.aspect = savedAspect;
+  camera.updateProjectionMatrix();
+  ground.visible = true;
+  scene.background = scene._savedBackground || scene.background;
+  scene.fog = savedFog;
+  // Restore background (it was cleared for the thumb)
+  textureLoader.load('RMSField.png', (tex) => {
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    scene.background = tex;
+  });
+}
+
 function applyCarTexture(url) {
   textureLoader.load(url, (tex) => {
     applyTexture(carModel, tex);
@@ -1095,13 +1149,9 @@ function applyCarTexture(url) {
       lockOverlay.style.display = 'none';
       initSound();
     }
-    const img = new Image();
-    img.onload = () => {
-      const c = document.createElement('canvas'); c.width = 128; c.height = 128;
-      c.getContext('2d').drawImage(img, 0, 0, 128, 128);
-      carTextureDataUrl = c.toDataURL('image/jpeg', 0.7);
-    };
-    img.src = url;
+    // Capture the 3/4 view thumbnail after the texture is applied
+    // Use requestAnimationFrame to ensure the texture is fully uploaded to GPU first
+    requestAnimationFrame(() => captureCarThumbnail());
   });
 }
 
