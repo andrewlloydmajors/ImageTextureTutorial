@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Leaderboard Admin — Texture Map Cup</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;700&display=swap');
+
+  :root {
+    --bg:        #0f1117;
+    --surface:   #1a1d27;
+    --border:    #2a2d3a;
+    --text:      #e8eaf0;
+    --muted:     #6b7080;
+    --gold:      #f5c842;
+    --silver:    #b0b8c8;
+    --bronze:    #c87f3e;
+    --blue:      #4a90d9;
+    --green:     #3db87a;
+    --red:       #d94a4a;
+    --pending:   #e0a030;
+    --approved:  #3db87a;
+    --radius:    10px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    padding: 0;
+  }
+
+  /* ── AUTH SCREEN ────────────────────────────────── */
+  #authScreen {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 20px;
+    background: radial-gradient(ellipse at 50% 40%, #1e2235 0%, #0f1117 70%);
+  }
+  #authScreen h1 {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--gold);
+  }
+  #authScreen p { color: var(--muted); font-size: 14px; }
+  #authBox {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 32px 36px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    width: 320px;
+  }
+  #authBox input {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 15px;
+    padding: 10px 14px;
+    font-family: 'DM Mono', monospace;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  #authBox input:focus { border-color: var(--blue); }
+  #authBox button {
+    background: var(--blue);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 11px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    transition: opacity 0.15s;
+  }
+  #authBox button:hover { opacity: 0.88; }
+  #authError {
+    color: var(--red);
+    font-size: 13px;
+    text-align: center;
+    display: none;
+  }
+
+  /* ── MAIN PANEL ─────────────────────────────────── */
+  #adminPanel { display: none; }
+
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 18px 36px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  header h1 {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--gold);
+    letter-spacing: -0.01em;
+    flex: 1;
+  }
+  header .subtitle {
+    font-size: 13px;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+  }
+  .header-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 7px;
+    padding: 7px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    transition: background 0.12s;
+  }
+  .header-btn:hover { background: var(--border); }
+  .header-btn.danger { border-color: var(--red); color: var(--red); }
+  .header-btn.danger:hover { background: rgba(217,74,74,0.12); }
+
+  main { max-width: 960px; margin: 0 auto; padding: 32px 24px; }
+
+  /* ── STATS ROW ───────────────────────────────────── */
+  .stats-row {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+  .stat-card {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+  }
+  .stat-card .val {
+    font-size: 28px;
+    font-weight: 700;
+    font-family: 'DM Mono', monospace;
+    color: var(--gold);
+  }
+  .stat-card .lbl {
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-top: 4px;
+  }
+
+  /* ── FILTERS ─────────────────────────────────────── */
+  .filter-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+  .filter-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 20px;
+    padding: 6px 16px;
+    font-size: 13px;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    transition: all 0.12s;
+  }
+  .filter-btn.active {
+    background: var(--blue);
+    border-color: var(--blue);
+    color: #fff;
+  }
+
+  /* ── ENTRY CARDS ─────────────────────────────────── */
+  #entriesList { display: flex; flex-direction: column; gap: 12px; }
+
+  .entry-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 18px;
+    transition: border-color 0.15s;
+  }
+  .entry-card:hover { border-color: #3a3d50; }
+  .entry-card.approved { border-left: 3px solid var(--approved); }
+  .entry-card.pending  { border-left: 3px solid var(--pending); }
+
+  .entry-rank {
+    width: 36px;
+    text-align: center;
+    font-size: 18px;
+    font-weight: 700;
+    font-family: 'DM Mono', monospace;
+    flex-shrink: 0;
+  }
+  .rank-1 { color: var(--gold); }
+  .rank-2 { color: var(--silver); }
+  .rank-3 { color: var(--bronze); }
+  .rank-other { color: var(--muted); font-size: 14px; }
+
+  .entry-car {
+    width: 56px;
+    height: 56px;
+    object-fit: cover;
+    border-radius: 6px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: transform 0.15s;
+  }
+  .entry-car:hover { transform: scale(1.08); }
+
+  .entry-info { flex: 1; min-width: 0; }
+  .entry-name {
+    font-size: 16px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .entry-meta {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 3px;
+    font-family: 'DM Mono', monospace;
+  }
+  .entry-email {
+    font-size: 12px;
+    color: var(--blue);
+    margin-top: 2px;
+  }
+
+  .entry-time {
+    font-family: 'DM Mono', monospace;
+    font-size: 20px;
+    font-weight: 500;
+    color: #7ef;
+    flex-shrink: 0;
+    width: 100px;
+    text-align: right;
+  }
+
+  .entry-status {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 3px 9px;
+    border-radius: 20px;
+    flex-shrink: 0;
+  }
+  .status-pending  { background: rgba(224,160,48,0.15);  color: var(--pending); }
+  .status-approved { background: rgba(61,184,122,0.15);  color: var(--approved); }
+
+  .entry-actions { display: flex; gap: 8px; flex-shrink: 0; }
+  .act-btn {
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 7px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 500;
+    transition: all 0.12s;
+    background: transparent;
+  }
+  .act-approve {
+    border-color: var(--green);
+    color: var(--green);
+  }
+  .act-approve:hover { background: rgba(61,184,122,0.15); }
+  .act-delete {
+    border-color: var(--red);
+    color: var(--red);
+  }
+  .act-delete:hover { background: rgba(217,74,74,0.12); }
+
+  .empty-state {
+    text-align: center;
+    color: var(--muted);
+    padding: 48px 0;
+    font-size: 15px;
+  }
+  .empty-state .icon { font-size: 40px; margin-bottom: 12px; }
+
+  /* ── IMAGE LIGHTBOX ──────────────────────────────── */
+  #lightbox {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: zoom-out;
+    display: none;
+  }
+  #lightbox img {
+    max-width: 80vw;
+    max-height: 80vh;
+    border-radius: 10px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+  }
+
+  /* ── CONFIRM DIALOG ──────────────────────────────── */
+  #confirmDialog {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 300;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    display: none;
+  }
+  .confirm-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 28px 32px;
+    max-width: 360px;
+    width: 90%;
+  }
+  .confirm-box h3 { font-size: 18px; margin-bottom: 10px; }
+  .confirm-box p  { font-size: 14px; color: var(--muted); line-height: 1.5; margin-bottom: 20px; }
+  .confirm-btns   { display: flex; gap: 10px; }
+  .confirm-btns button {
+    flex: 1;
+    padding: 10px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    border: none;
+  }
+  .confirm-cancel  { background: var(--border); color: var(--text); }
+  .confirm-proceed { background: var(--red);    color: #fff; }
+</style>
+</head>
+<body>
+
+<!-- ── AUTH ──────────────────────────────────────────── -->
+<div id="authScreen">
+  <h1>🏁 Texture Map Cup</h1>
+  <p>Leaderboard Administration</p>
+  <div id="authBox">
+    <input type="password" id="pwInput" placeholder="Admin password" autocomplete="current-password">
+    <div id="authError">Incorrect password.</div>
+    <button id="loginBtn">Sign In</button>
+  </div>
+</div>
+
+<!-- ── ADMIN PANEL ────────────────────────────────────── -->
+<div id="adminPanel">
+  <header>
+    <h1>🏁 Leaderboard Admin</h1>
+    <span class="subtitle" id="headerStats"></span>
+    <button class="header-btn" id="refreshBtn">↺ Refresh</button>
+    <button class="header-btn danger" id="clearAllBtn">✕ Clear All</button>
+  </header>
+
+  <main>
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="val" id="statTotal">0</div>
+        <div class="lbl">Total Entries</div>
+      </div>
+      <div class="stat-card">
+        <div class="val" id="statPending">0</div>
+        <div class="lbl">Pending Approval</div>
+      </div>
+      <div class="stat-card">
+        <div class="val" id="statApproved">0</div>
+        <div class="lbl">Approved</div>
+      </div>
+      <div class="stat-card">
+        <div class="val" id="statBest">—</div>
+        <div class="lbl">Class Record</div>
+      </div>
+    </div>
+
+    <div class="filter-row">
+      <button class="filter-btn active" data-filter="all">All</button>
+      <button class="filter-btn" data-filter="pending">Pending</button>
+      <button class="filter-btn" data-filter="approved">Approved</button>
+    </div>
+
+    <div id="entriesList"></div>
+  </main>
+</div>
+
+<!-- ── LIGHTBOX ───────────────────────────────────────── -->
+<div id="lightbox"><img id="lightboxImg" src="" alt="Car texture"></div>
+
+<!-- ── CONFIRM DIALOG ────────────────────────────────── -->
+<div id="confirmDialog">
+  <div class="confirm-box">
+    <h3 id="confirmTitle">Are you sure?</h3>
+    <p id="confirmMsg"></p>
+    <div class="confirm-btns">
+      <button class="confirm-cancel"  id="confirmCancel">Cancel</button>
+      <button class="confirm-proceed" id="confirmProceed">Delete</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════════
+const ADMIN_PASSWORD = 'rmsadmin';
+const MAX_ENTRIES    = 10;
+
+// ═══════════════════════════════════════════════════════
+// AUTH
+// ═══════════════════════════════════════════════════════
+function attemptLogin() {
+  const pw = document.getElementById('pwInput').value;
+  if (pw === ADMIN_PASSWORD) {
+    document.getElementById('authScreen').style.display = 'none';
+    document.getElementById('adminPanel').style.display = 'block';
+    loadAndRender();
+  } else {
+    document.getElementById('authError').style.display = 'block';
+    document.getElementById('pwInput').value = '';
+  }
+}
+document.getElementById('loginBtn').addEventListener('click', attemptLogin);
+document.getElementById('pwInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') attemptLogin(); });
+
+// ═══════════════════════════════════════════════════════
+// STORAGE
+// ═══════════════════════════════════════════════════════
+async function storageGet(key, shared = true) {
+  try {
+    const r = await window.storage.get(key, shared);
+    return r ? JSON.parse(r.value) : null;
+  } catch { return null; }
+}
+async function storageSet(key, value, shared = true) {
+  try { await window.storage.set(key, JSON.stringify(value), shared); }
+  catch(e) { console.error('storage set failed', e); }
+}
+async function storageDelete(key, shared = true) {
+  try { await window.storage.delete(key, shared); }
+  catch(e) { console.error('storage delete failed', e); }
+}
+
+// ═══════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════
+let entries = [];
+let currentFilter = 'all';
+
+async function loadAndRender() {
+  entries = (await storageGet('leaderboard:entries')) || [];
+  renderAll();
+}
+
+async function saveEntries() {
+  await storageSet('leaderboard:entries', entries);
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════════════
+function renderAll() {
+  renderStats();
+  renderList();
+}
+
+function renderStats() {
+  const total    = entries.length;
+  const pending  = entries.filter(e => !e.approved).length;
+  const approved = entries.filter(e =>  e.approved).length;
+  const best     = entries.length > 0 ? entries[0].time : '—';
+
+  document.getElementById('statTotal').textContent    = total;
+  document.getElementById('statPending').textContent  = pending;
+  document.getElementById('statApproved').textContent = approved;
+  document.getElementById('statBest').textContent     = best;
+  document.getElementById('headerStats').textContent  =
+    `${total} entries · ${pending} pending`;
+}
+
+function renderList() {
+  const list = document.getElementById('entriesList');
+  list.innerHTML = '';
+
+  let filtered = entries;
+  if (currentFilter === 'pending')  filtered = entries.filter(e => !e.approved);
+  if (currentFilter === 'approved') filtered = entries.filter(e =>  e.approved);
+
+  if (filtered.length === 0) {
+    list.innerHTML = `<div class="empty-state"><div class="icon">🏁</div>No entries found.</div>`;
+    return;
+  }
+
+  filtered.forEach((entry) => {
+    // Rank is position in the full sorted entries array (0-indexed)
+    const rank = entries.indexOf(entry) + 1;
+    const rankLabel = rank === 1 ? '1' : rank === 2 ? '2' : rank === 3 ? '3' : rank;
+    const rankClass = rank === 1 ? 'rank-1' : rank === 2 ? 'rank-2' : rank === 3 ? 'rank-3' : 'rank-other';
+
+    const card = document.createElement('div');
+    card.className = `entry-card ${entry.approved ? 'approved' : 'pending'}`;
+
+    const imgSrc = entry.textureDataUrl || 'placeholdercartexture.png';
+    const submitted = new Date(entry.submittedAt).toLocaleDateString('en-US', {
+      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+    });
+
+    card.innerHTML = `
+      <div class="entry-rank ${rankClass}">${rankLabel}</div>
+      <img class="entry-car" src="${imgSrc}" alt="Car texture" data-src="${imgSrc}">
+      <div class="entry-info">
+        <div class="entry-name">${escHtml(entry.name)}</div>
+        <div class="entry-email">${escHtml(entry.email)}</div>
+        <div class="entry-meta">Submitted ${submitted} · ID ${entry.id}</div>
+      </div>
+      <div class="entry-time">${entry.time}</div>
+      <div class="entry-status ${entry.approved ? 'status-approved' : 'status-pending'}">
+        ${entry.approved ? 'Approved' : 'Pending'}
+      </div>
+      <div class="entry-actions">
+        ${!entry.approved
+          ? `<button class="act-btn act-approve" data-id="${entry.id}">✓ Approve</button>`
+          : `<button class="act-btn act-approve" data-id="${entry.id}" style="opacity:0.4;cursor:default;" disabled>✓ Approved</button>`
+        }
+        <button class="act-btn act-delete" data-id="${entry.id}">✕ Delete</button>
+      </div>`;
+
+    // Lightbox on car image click
+    card.querySelector('.entry-car').addEventListener('click', (e) => {
+      openLightbox(e.target.dataset.src);
+    });
+
+    // Approve
+    const approveBtn = card.querySelector('.act-approve:not([disabled])');
+    if (approveBtn) {
+      approveBtn.addEventListener('click', () => approveEntry(entry.id));
+    }
+
+    // Delete
+    card.querySelector('.act-delete').addEventListener('click', () => {
+      confirmDelete(entry.id, entry.name, rank);
+    });
+
+    list.appendChild(card);
+  });
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ═══════════════════════════════════════════════════════
+// ACTIONS
+// ═══════════════════════════════════════════════════════
+async function approveEntry(id) {
+  const entry = entries.find(e => e.id === id);
+  if (!entry) return;
+  entry.approved = true;
+  await saveEntries();
+  renderAll();
+}
+
+async function deleteEntry(id) {
+  // Remove the entry
+  entries = entries.filter(e => e.id !== id);
+  // Entries are already sorted by timeMs — no need to re-sort
+  // But trim to MAX_ENTRIES just in case
+  if (entries.length > MAX_ENTRIES) entries = entries.slice(0, MAX_ENTRIES);
+  await saveEntries();
+  renderAll();
+}
+
+// ═══════════════════════════════════════════════════════
+// CONFIRM DIALOG
+// ═══════════════════════════════════════════════════════
+let pendingDeleteId = null;
+
+function confirmDelete(id, name, rank) {
+  pendingDeleteId = id;
+  document.getElementById('confirmTitle').textContent = 'Delete Entry?';
+  const rankStr = rank <= 3 ? `This is currently rank #${rank}. ` : '';
+  document.getElementById('confirmMsg').textContent =
+    `${rankStr}Deleting "${name}" will remove them from the leaderboard. The next best entry will move up.`;
+  document.getElementById('confirmDialog').style.display = 'flex';
+}
+
+document.getElementById('confirmCancel').addEventListener('click', () => {
+  document.getElementById('confirmDialog').style.display = 'none';
+  pendingDeleteId = null;
+});
+document.getElementById('confirmProceed').addEventListener('click', async () => {
+  document.getElementById('confirmDialog').style.display = 'none';
+  if (pendingDeleteId !== null) {
+    await deleteEntry(pendingDeleteId);
+    pendingDeleteId = null;
+  }
+});
+
+// ═══════════════════════════════════════════════════════
+// LIGHTBOX
+// ═══════════════════════════════════════════════════════
+function openLightbox(src) {
+  document.getElementById('lightboxImg').src = src;
+  document.getElementById('lightbox').style.display = 'flex';
+}
+document.getElementById('lightbox').addEventListener('click', () => {
+  document.getElementById('lightbox').style.display = 'none';
+});
+
+// ═══════════════════════════════════════════════════════
+// FILTERS
+// ═══════════════════════════════════════════════════════
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentFilter = btn.dataset.filter;
+    renderList();
+  });
+});
+
+// ═══════════════════════════════════════════════════════
+// HEADER BUTTONS
+// ═══════════════════════════════════════════════════════
+document.getElementById('refreshBtn').addEventListener('click', loadAndRender);
+
+document.getElementById('clearAllBtn').addEventListener('click', () => {
+  pendingDeleteId = 'ALL';
+  document.getElementById('confirmTitle').textContent = 'Clear All Entries?';
+  document.getElementById('confirmMsg').textContent =
+    'This will permanently delete ALL leaderboard entries and cannot be undone.';
+  document.getElementById('confirmProceed').textContent = 'Clear All';
+  document.getElementById('confirmDialog').style.display = 'flex';
+});
+
+// Override confirm proceed for "clear all"
+document.getElementById('confirmProceed').addEventListener('click', async () => {
+  // Already handled above but need to catch the ALL case
+}, { once: false });
+
+// Patch the proceed button to handle both cases
+const origProceed = document.getElementById('confirmProceed');
+origProceed.addEventListener('click', async () => {
+  if (pendingDeleteId === 'ALL') {
+    document.getElementById('confirmDialog').style.display = 'none';
+    entries = [];
+    await saveEntries();
+    await storageDelete('leaderboard:classRecordGhost');
+    pendingDeleteId = null;
+    document.getElementById('confirmProceed').textContent = 'Delete';
+    renderAll();
+  }
+});
+</script>
+</body>
+</html>
