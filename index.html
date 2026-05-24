@@ -1080,7 +1080,7 @@ function updateDriftSound(isDrifting) {
     peak.gain.value      = 8;   // was 18 — much gentler lift
 
     const g = audioCtx.createGain();
-    g.gain.value = 0.06;
+    g.gain.value = 0.04;
 
     driftSoundNode.connect(hp);
     hp.connect(peak);
