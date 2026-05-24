@@ -349,6 +349,10 @@ canvas { display: block; }
       <span class="btn-icon">📷</span>
       <span class="btn-label">Screenshot</span>
     </button>
+    <button id="muteBtn">
+      <span class="btn-icon" id="muteIcon">🔊</span>
+      <span class="btn-label">Sound</span>
+    </button>
   </div>
 
   <div id="ghostRow">
@@ -1049,7 +1053,7 @@ function playThud() {
   const lp = audioCtx.createBiquadFilter();
   lp.type = 'lowpass'; lp.frequency.value = 180;
   const g = audioCtx.createGain();
-  g.gain.value = 0.7;
+  g.gain.value = 0.32;
   src.connect(lp); lp.connect(g); g.connect(audioCtx.destination);
   src.start();
 }
@@ -1738,6 +1742,22 @@ document.getElementById('fogColor').addEventListener('input',(e)=>{
 // QoL BUTTONS
 // ═══════════════════════════════════════════════════════
 document.getElementById('resetBtn').addEventListener('click',resetCar);
+
+// Mute toggle — connects/disconnects the AudioContext destination
+let isMuted = false;
+const muteGain = audioCtx.createGain();
+// Route everything through muteGain → destination
+// We do this by inserting it as the final node; existing nodes already
+// connect to audioCtx.destination so we patch by suspending the context.
+document.getElementById('muteBtn').addEventListener('click', () => {
+  isMuted = !isMuted;
+  if(isMuted) {
+    audioCtx.suspend();
+  } else {
+    audioCtx.resume();
+  }
+  document.getElementById('muteIcon').textContent = isMuted ? '🔇' : '🔊';
+});
 document.getElementById('fullscreenBtn').addEventListener('click',()=>{
   if(!document.fullscreenElement) document.documentElement.requestFullscreen();
   else document.exitFullscreen();
