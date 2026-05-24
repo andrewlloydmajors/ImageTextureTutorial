@@ -892,8 +892,8 @@ let lateralVel = new THREE.Vector3();
 const DRIFT_GRIP=0.18, DRIFT_GRIP_SLIDE=0.006, DRIFT_BUILDUP=0.025;
 const NATURAL_BLEED=0.012, DRIFT_FRICTION=0.0008;
 // How strongly steer input rotates the slide direction mid-drift.
-// Higher = easier to catch/widen a drift with the wheel. 0.008 is subtle but responsive.
-const DRIFT_STEER_INFLUENCE = 0.008;
+// Kept low so counter-steer adjusts direction without cancelling the slide.
+const DRIFT_STEER_INFLUENCE = 0.004;
 const baseOffset=new THREE.Vector3(0,3,8), lookOffset=new THREE.Vector3(0,1,0);
 const smoothedCarPos=new THREE.Vector3();
 const _spinAxis=new THREE.Vector3(1,0,0), _spinQ=new THREE.Quaternion();
@@ -962,7 +962,7 @@ function updateEngineSound(spd, isDrifting) {
   const t   = audioCtx.currentTime;
   const baseHz = 55 + n * 130 + (isDrifting ? 25 : 0);
   // 0.3s time constant — gradual rev-up and rev-down
-  engineOsc.frequency.setTargetAtTime(baseHz, t, 0.3);
+  engineOsc.frequency.setTargetAtTime(baseHz, t, 0.55);
   engineGain.gain.setTargetAtTime(n * 0.042 + 0.008, t, 0.3);
   // LFO rate: 6 Hz at idle → 22 Hz at full speed (engine roughness)
   engineLFO.frequency.setTargetAtTime(6 + n * 16, t, 0.08);
@@ -985,35 +985,18 @@ function playSound(type) {
   const src=audioCtx.createBufferSource(); src.buffer=buf;
   src.connect(audioCtx.destination); src.start();
 }
-// Drift sound uses a persistent looping node with a gain that fades
-// in/out smoothly rather than starting/stopping abruptly.
-let driftGainNode = null;
-
-function initDriftSound() {
-  if(driftGainNode) return;
-  const buf = audioCtx.createBuffer(1, audioCtx.sampleRate, audioCtx.sampleRate);
-  const d   = buf.getChannelData(0);
-  for(let i = 0; i < d.length; i++) d[i] = (Math.random()*2-1) * 0.08;
-  driftSoundNode = audioCtx.createBufferSource();
-  driftSoundNode.buffer = buf;
-  driftSoundNode.loop   = true;
-  const f = audioCtx.createBiquadFilter();
-  f.type = 'bandpass'; f.frequency.value = 1200; f.Q.value = 0.8;
-  driftGainNode = audioCtx.createGain();
-  driftGainNode.gain.value = 0;   // start silent
-  driftSoundNode.connect(f);
-  f.connect(driftGainNode);
-  driftGainNode.connect(audioCtx.destination);
-  driftSoundNode.start();
-}
-
 function updateDriftSound(isDrifting) {
   if(!soundUnlocked) return;
-  if(!driftGainNode) initDriftSound();
-  const target = isDrifting ? 0.18 : 0;
-  // timeConstant: 0.18s fade-in, 0.28s fade-out — build up slower than decay
-  const tc = isDrifting ? 0.18 : 0.28;
-  driftGainNode.gain.setTargetAtTime(target, audioCtx.currentTime, tc);
+  if(isDrifting && !driftSoundNode) {
+    const buf=audioCtx.createBuffer(1,audioCtx.sampleRate,audioCtx.sampleRate);
+    const d=buf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*0.08;
+    driftSoundNode=audioCtx.createBufferSource(); driftSoundNode.buffer=buf; driftSoundNode.loop=true;
+    const g=audioCtx.createGain(); g.gain.value=0.18;
+    const f=audioCtx.createBiquadFilter(); f.type='bandpass'; f.frequency.value=1200; f.Q.value=0.8;
+    driftSoundNode.connect(f); f.connect(g); g.connect(audioCtx.destination); driftSoundNode.start();
+  } else if(!isDrifting && driftSoundNode) {
+    driftSoundNode.stop(); driftSoundNode=null;
+  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1220,25 +1203,34 @@ function physicsTick() {
       const forwardComp = totalVel.dot(fd);
       const lateralComp = totalVel.dot(rd);
 
-      // Seed: carry existing lateral + steer input kick + speed-scaled entry push
-      // The speed-scaled push is what gives you visible sideways movement at entry
-      const entrySeed = lateralComp + si * DRIFT_BUILDUP + Math.sign(si || 1) * speedFactor * 0.04;
+      // Seed: carry existing lateral + steer-direction kick + strong speed-scaled push.
+      // The speed-scaled push is the main source of visible sideways movement.
+      // Use steer direction as the slide direction; if no steer, default to right.
+      const slideDir = si !== 0 ? si : 1;
+      const entrySeed = lateralComp + slideDir * (DRIFT_BUILDUP + speedFactor * 0.12);
       lateralVel.copy(rd).multiplyScalar(entrySeed);
       speed = forwardComp;
     } else {
-      // ── Mid-drift: steer rotates slide direction, doesn't add magnitude ──
-      // This is counter-steer: turning right when going left-sideways
-      // rotates lateralVel back toward forward, catching the drift.
+      // ── Mid-drift: steer gently rotates slide direction (counter-steer) ──
+      // Kept deliberately weak so it takes real effort to cancel the slide —
+      // you can steer the drift but can't accidentally zero it out.
       const currentMag = lateralVel.length();
       if(currentMag > 0.001) {
         lateralVel.addScaledVector(rd, si * DRIFT_STEER_INFLUENCE * speedFactor);
-        // Preserve magnitude — we're changing direction, not adding velocity
+        // Clamp to original magnitude so steer rotates direction, doesn't add speed
         lateralVel.setLength(currentMag);
       }
     }
 
     // Very low grip — slide persists on momentum while spacebar held
     lateralVel.multiplyScalar(1 - DRIFT_GRIP_SLIDE);
+
+    // Floor: while actively drifting at speed, maintain a minimum slide so
+    // counter-steer never fully cancels the visible sideways movement
+    const minLateral = speedFactor * 0.04;
+    if(lateralVel.length() < minLateral && Math.abs(speed) > maxSpeed * 0.3) {
+      lateralVel.setLength(minLateral);
+    }
 
     // Cap relative to speed so slide shrinks naturally as car slows
     const ml = Math.abs(speed) * 0.92;
