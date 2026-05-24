@@ -353,12 +353,12 @@ canvas { display: block; }
 
   <div id="ghostRow">
     <label>
-      <input type="checkbox" id="ghostPB" checked>
+      <input type="checkbox" id="ghostPB">
       <span class="toggle-icon">👻</span>
       <span class="toggle-label">My Best</span>
     </label>
     <label>
-      <input type="checkbox" id="ghostCR" checked>
+      <input type="checkbox" id="ghostCR">
       <span class="toggle-icon">🏆</span>
       <span class="toggle-label">Top Record</span>
     </label>
@@ -396,7 +396,7 @@ canvas { display: block; }
     <img id="submitPreview" class="modal-preview" src="" alt="Your car">
     <div id="submitError" class="modal-error"></div>
     <input type="text"  id="submitName"  placeholder="Your name" maxlength="40">
-    <input type="email" id="submitEmail" placeholder="School email">
+    <input type="email" id="submitEmail" placeholder="School email (must end in student.us)">
     <div class="modal-btn-row">
       <button class="btn-secondary" id="submitCancel">Maybe later</button>
       <button class="btn-primary"   id="submitConfirm">Submit ✓</button>
@@ -469,9 +469,14 @@ const POS_CLASS   = ['gold','silver','bronze'];
 let lbEntries = [];
 
 async function loadLeaderboard() {
-  const data = await fbGet(LB_DOC);
-  lbEntries = data ? (data.entries || []) : [];
-  renderLeaderboard();
+  // onSnapshot fires immediately and populates lbEntries, so we only
+  // need the manual fbGet as a fallback if the snapshot hasn't arrived yet.
+  if(lbEntries.length === 0) {
+    const data = await fbGet(LB_DOC);
+    lbEntries = data ? (data.entries || []) : [];
+    renderLeaderboard();
+    refreshRecordGhostFromLeaderboard();
+  }
 }
 
 async function saveLeaderboard() {
@@ -483,6 +488,7 @@ onSnapshot(LB_DOC, (snap) => {
   if (!snap.exists()) return;
   lbEntries = snap.data().entries || [];
   renderLeaderboard();
+  refreshRecordGhostFromLeaderboard();
 });
 
 function renderLeaderboard() {
@@ -528,13 +534,40 @@ function isBetterThanOwn(email, timeMs) {
 
 // ═══════════════════════════════════════════════════════
 // RECORD GHOST STORAGE
+// Ghost frames are stored inside each leaderboard entry so when an
+// entry is deleted/replaced the ghost automatically updates.
+// The "top record" ghost is always the ghost of lbEntries[0].
 // ═══════════════════════════════════════════════════════
 async function loadRecordGhost() {
-  const data = await fbGet(CR_DOC);
-  return data ? (data.frames || null) : null;
+  // Pull the ghost from the current top leaderboard entry (index 0)
+  const data = await fbGet(LB_DOC);
+  const entries = data ? (data.entries || []) : [];
+  return entries.length > 0 ? (entries[0].ghostFrames || null) : null;
 }
+
 async function saveRecordGhost(frames) {
-  await fbSet(CR_DOC, { frames });
+  // Save ghost frames into the submitter's own leaderboard entry.
+  // Called right after their entry is upserted, so lbEntries is fresh.
+  // We update the entry in place without a full re-read.
+  const fresh = await fbGet(LB_DOC);
+  const entries = fresh ? (fresh.entries || []) : [];
+  // Find the entry that matches the current session email (just submitted)
+  const idx = sessionSubmission
+    ? entries.findIndex(e => e.email.toLowerCase() === sessionSubmission.email.toLowerCase())
+    : 0;
+  if (idx !== -1) {
+    entries[idx].ghostFrames = frames;
+    await fbSet(LB_DOC, { entries });
+  }
+}
+
+// Load the top-record ghost after the leaderboard loads
+function refreshRecordGhostFromLeaderboard() {
+  if (lbEntries.length > 0 && lbEntries[0].ghostFrames) {
+    crGhostFrames = lbEntries[0].ghostFrames;
+  } else {
+    crGhostFrames = [];
+  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -673,6 +706,7 @@ function resetCar() {
 // ═══════════════════════════════════════════════════════
 let pbGhostFrames = [], crGhostFrames = [];
 let currentLapGhostFrames = [];
+let pendingGhostFrames = [];  // ghost for the lap just completed, saved if player submits
 let ghostPlaybackPBFrame  = 0, ghostPlaybackCRFrame = 0;
 let pbGhostMesh = null,        crGhostMesh = null;
 let ghostsInitialized = false;
@@ -838,10 +872,24 @@ window.addEventListener('mousemove', (e)=>{
 // PHYSICS
 // ═══════════════════════════════════════════════════════
 let speed=0;
-const maxSpeed=0.42, acceleration=0.004, friction=0.004, turnSpeed=0.032;
+const maxSpeed=0.42, acceleration=0.004, friction=0.004;
+
+// ── Steering & drift tuning knobs ────────────────────
+// BASE_TURN: max turn rate at low speed (no speed penalty)
+const BASE_TURN = 0.032;
+// TURN_SPEED_PENALTY: how much turn rate drops at full speed without drifting.
+//   0 = no penalty (old behaviour), 1 = zero turning at max speed.
+//   0.55 means at full speed you have 45% of base turn rate — tight corners
+//   require drifting, gentle corners are still manageable.
+const TURN_SPEED_PENALTY = 0.55;
+// DRIFT_TURN_BOOST: multiplier on turn rate while drifting.
+//   Lower than before (1.2 vs 1.5) so drift isn't a magic tight-turn button,
+//   but it still meaningfully recovers the turn radius lost to speed penalty.
+const DRIFT_TURN_BOOST = 1.2;
+
 let lateralVel = new THREE.Vector3();
-const DRIFT_GRIP=0.18, DRIFT_GRIP_SLIDE=0.04, DRIFT_BUILDUP=0.035;
-const DRIFT_TURN_BOOST=1.5, NATURAL_BLEED=0.012, DRIFT_FRICTION=0.0015;
+const DRIFT_GRIP=0.18, DRIFT_GRIP_SLIDE=0.06, DRIFT_BUILDUP=0.025;
+const NATURAL_BLEED=0.012, DRIFT_FRICTION=0.0015;
 const baseOffset=new THREE.Vector3(0,3,8), lookOffset=new THREE.Vector3(0,1,0);
 const smoothedCarPos=new THREE.Vector3();
 const _spinAxis=new THREE.Vector3(1,0,0), _spinQ=new THREE.Quaternion();
@@ -873,20 +921,48 @@ function updateLapTimer() {
 const audioCtx = new (window.AudioContext||window.webkitAudioContext)();
 let engineGain, engineOsc, driftSoundNode, soundUnlocked=false;
 
+let engineLFO, engineLFOGain;
 function initSound() {
   if(soundUnlocked) return; soundUnlocked=true;
+
+  // Main engine oscillator (sawtooth = harsh/buzzy engine tone)
   engineOsc  = audioCtx.createOscillator();
   engineGain = audioCtx.createGain();
-  const f = audioCtx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=400;
-  engineOsc.type='sawtooth'; engineOsc.frequency.value=60;
-  engineOsc.connect(f); f.connect(engineGain); engineGain.connect(audioCtx.destination);
-  engineGain.gain.value=0; engineOsc.start();
+
+  // Low-pass filter softens the raw sawtooth
+  const lpf = audioCtx.createBiquadFilter();
+  lpf.type = 'lowpass'; lpf.frequency.value = 500; lpf.Q.value = 1.2;
+
+  // LFO modulates the engine pitch to create rumble/wobble.
+  // Rate and depth both increase with speed for a convincing rev effect.
+  engineLFO     = audioCtx.createOscillator();
+  engineLFOGain = audioCtx.createGain();
+  engineLFO.type = 'sine';
+  engineLFO.frequency.value = 4;   // Hz — slow wobble at idle
+  engineLFOGain.gain.value  = 3;   // semitone-equivalent depth at idle
+  engineLFO.connect(engineLFOGain);
+  engineLFOGain.connect(engineOsc.frequency); // FM: LFO → carrier frequency
+
+  engineOsc.type = 'sawtooth';
+  engineOsc.frequency.value = 60;
+  engineOsc.connect(lpf);
+  lpf.connect(engineGain);
+  engineGain.connect(audioCtx.destination);
+  engineGain.gain.value = 0;
+  engineOsc.start();
+  engineLFO.start();
 }
-function updateEngineSound(spd,isDrifting) {
+function updateEngineSound(spd, isDrifting) {
   if(!soundUnlocked) return;
-  const n=Math.abs(spd)/maxSpeed;
-  engineOsc.frequency.setTargetAtTime(55+n*120+(isDrifting?30:0), audioCtx.currentTime, 0.05);
-  engineGain.gain.setTargetAtTime(n*0.04+0.008, audioCtx.currentTime, 0.05);
+  const n   = Math.abs(spd) / maxSpeed;
+  const t   = audioCtx.currentTime;
+  const baseHz = 55 + n * 130 + (isDrifting ? 25 : 0);
+  engineOsc.frequency.setTargetAtTime(baseHz, t, 0.05);
+  engineGain.gain.setTargetAtTime(n * 0.042 + 0.008, t, 0.05);
+  // LFO rate: 4 Hz at idle → 18 Hz at full speed (engine roughness)
+  engineLFO.frequency.setTargetAtTime(4 + n * 14, t, 0.08);
+  // LFO depth: gentle wobble at low speed, stronger rumble at high speed
+  engineLFOGain.gain.setTargetAtTime(3 + n * 18, t, 0.08);
 }
 function playSound(type) {
   if(!soundUnlocked) return;
@@ -944,34 +1020,33 @@ async function upsertLeaderboardEntry(name, email, lapMs) {
   const fresh = await fbGet(LB_DOC);
   lbEntries = fresh ? (fresh.entries||[]) : [];
 
+  // Always remove any existing entry for this email first — this prevents
+  // duplicates when name/email changes (edit mode) or faster times come in
   const existingIdx = lbEntries.findIndex(e => e.email.toLowerCase() === email.toLowerCase());
-
+  let preserved = null;
   if(existingIdx !== -1) {
     // Only update if this lap is faster than their current entry
     if(lapMs >= lbEntries[existingIdx].timeMs) return;
-    // Preserve approved state and original id so moderation isn't lost
-    lbEntries[existingIdx] = {
-      ...lbEntries[existingIdx],
-      time:           formatTime(lapMs),
-      timeMs:         lapMs,
-      textureDataUrl: carTextureDataUrl || lbEntries[existingIdx].textureDataUrl,
-      submittedAt:    new Date().toISOString(),
-    };
-  } else {
-    lbEntries.push({
-      id:             Date.now(),
-      name, email,
-      time:           formatTime(lapMs),
-      timeMs:         lapMs,
-      textureDataUrl: carTextureDataUrl||null,
-      approved:       false,
-      submittedAt:    new Date().toISOString(),
-    });
+    preserved = lbEntries[existingIdx]; // keep id and old ghost if no new one
+    lbEntries.splice(existingIdx, 1);
   }
+
+  lbEntries.push({
+    id:             preserved ? preserved.id : Date.now(),
+    name, email,
+    time:           formatTime(lapMs),
+    timeMs:         lapMs,
+    textureDataUrl: carTextureDataUrl || (preserved ? preserved.textureDataUrl : null),
+    ghostFrames:    pendingGhostFrames.length > 0 ? pendingGhostFrames : (preserved ? preserved.ghostFrames : []),
+    approved:       false,   // always re-pending on any change
+    submittedAt:    new Date().toISOString(),
+  });
 
   lbEntries.sort((a,b) => a.timeMs - b.timeMs);
   if(lbEntries.length > MAX_ENTRIES) lbEntries = lbEntries.slice(0, MAX_ENTRIES);
   await saveLeaderboard();
+  // Refresh local CR ghost in case this entry is now #1
+  refreshRecordGhostFromLeaderboard();
 }
 
 function openSubmitModal(lapMs, isEdit) {
@@ -1022,9 +1097,11 @@ document.getElementById('submitConfirm').addEventListener('click', async ()=>{
     emailErr.style.display='block'; return;
   }
   if(!email || !email.toLowerCase().endsWith('student.us')) {
-    emailErr.textContent = 'Email must be your school email.';
+    emailErr.textContent = 'Email must be your school email ending in student.us.';
     emailErr.style.display='block'; return;
   }
+
+  const oldEmail = sessionSubmission ? sessionSubmission.email : null;
 
   // Save to session so future top-3 laps skip the modal
   sessionSubmission = { name, email };
@@ -1032,6 +1109,18 @@ document.getElementById('submitConfirm').addEventListener('click', async ()=>{
 
   const lapToSubmit = pendingLapMs !== null ? pendingLapMs : bestLapMs;
   if(lapToSubmit === null) { submitModal.classList.add('hidden'); return; }
+
+  // If the email changed, remove the old entry first so there's no duplicate
+  if(oldEmail && oldEmail.toLowerCase() !== email.toLowerCase()) {
+    const fresh = await fbGet(LB_DOC);
+    const entries = fresh ? (fresh.entries||[]) : [];
+    const filtered = entries.filter(e => e.email.toLowerCase() !== oldEmail.toLowerCase());
+    if(filtered.length !== entries.length) {
+      await fbSet(LB_DOC, { entries: filtered });
+    }
+    lbEntries = filtered;
+  }
+
   await upsertLeaderboardEntry(name, email, lapToSubmit);
   submitModal.classList.add('hidden');
   document.getElementById('changeInfoWrap').style.display = 'block';
@@ -1070,9 +1159,12 @@ function physicsTick() {
   const isDrifting  = keys[' '] && Math.abs(speed) > maxSpeed * 0.3;
   const speedFactor = Math.min(Math.abs(speed) / maxSpeed, 1);
   const turnDir     = speed < 0 ? -1 : 1;
-  const activeTurn  = isDrifting ? turnSpeed * DRIFT_TURN_BOOST : turnSpeed;
-  const si          = (keys['a'] ? 1 : 0) - (keys['d'] ? 1 : 0);
-  const steerTarget = si * activeTurn * speedFactor * turnDir;
+  // At low speed: full BASE_TURN. At full speed without drift: reduced by TURN_SPEED_PENALTY.
+  // Drifting partially restores the lost turn radius via DRIFT_TURN_BOOST.
+  const speedPenalty   = 1 - speedFactor * (isDrifting ? TURN_SPEED_PENALTY * 0.4 : TURN_SPEED_PENALTY);
+  const effectiveTurn  = BASE_TURN * Math.max(0, speedPenalty) * (isDrifting ? DRIFT_TURN_BOOST : 1);
+  const si             = (keys['a'] ? 1 : 0) - (keys['d'] ? 1 : 0);
+  const steerTarget    = si * effectiveTurn * speedFactor * turnDir;
   steerRate += (steerTarget - steerRate) * (si !== 0 ? STEER_BUILDUP : STEER_FALLOFF);
   carYaw += steerRate;
 
@@ -1145,9 +1237,10 @@ function physicsTick() {
             bestLapMs = lapMs; bestLapEl.textContent = formatTime(bestLapMs);
             bestLapEl.style.color = '#7ef'; setTimeout(() => bestLapEl.style.color = '', 1500);
             pbGhostFrames = currentLapGhostFrames.slice();
-            const topMs = lbEntries.length > 0 ? lbEntries[0].timeMs : Infinity;
-            if(lapMs < topMs) { crGhostFrames = currentLapGhostFrames.slice(); saveRecordGhost(crGhostFrames); }
           }
+          // Stash this lap's ghost frames so upsertLeaderboardEntry can save them
+          // alongside the entry — ghost is only stored if the player submits
+          pendingGhostFrames = currentLapGhostFrames.slice();
           playSound('lap');
           // Show modal (or silently update) only if this time is top-3
           // AND better than their own existing entry
@@ -1188,7 +1281,7 @@ function animate() {
   if(carModel && !ghostsInitialized) {
     ghostsInitialized = true;
     initGhosts();
-    loadRecordGhost().then(f => { if(f) crGhostFrames = f; });
+    // CR ghost is loaded inside loadLeaderboard via refreshRecordGhostFromLeaderboard
     loadLeaderboard();
   }
 
@@ -1373,6 +1466,7 @@ function applyCarTexture(url) {
           if(idx !== -1) {
             entries[idx].approved       = false;
             entries[idx].textureDataUrl = carTextureDataUrl || entries[idx].textureDataUrl;
+            // ghostFrames preserved — texture change doesn't invalidate the ghost
             await fbSet(LB_DOC, { entries });
           }
         }
