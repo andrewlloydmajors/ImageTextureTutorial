@@ -627,67 +627,59 @@ scene.add(ground);
 // ═══════════════════════════════════════════════════════
 // SKID MARKS
 // ═══════════════════════════════════════════════════════
-// We stamp dark marks onto a CanvasTexture that sits just above the ground.
-// Each mark is a small rectangle drawn in canvas 2D space (UV space mapped
-// to the ground plane). Marks fade by periodically reducing globalAlpha on
-// a fill pass. This avoids storing thousands of geometry objects.
+// Small flat quads placed just above the track surface, fading over time.
+// A pool of reusable meshes avoids constant geometry allocation.
 
-const SKID_CANVAS_SIZE = 2048;  // pixels — higher = sharper marks
-const SKID_WORLD_SIZE  = 6000;  // must match PlaneGeometry size
-const SKID_FADE_RATE   = 0.003; // opacity subtracted per fade tick (lower = longer marks)
-const SKID_FADE_EVERY  = 4;     // physics ticks between fade passes
-const SKID_MARK_W      = 6;     // mark width in canvas pixels
-const SKID_MARK_H      = 14;    // mark length in canvas pixels
+const SKID_POOL_SIZE   = 300;    // max simultaneous marks
+const SKID_FADE_RATE   = 0.008; // opacity lost per physics tick
+const SKID_MARK_W      = 0.28;  // world-unit width (~tyre width)
+const SKID_MARK_H      = 0.55;  // world-unit length per stamp
+const SKID_SPAWN_EVERY = 2;     // physics ticks between stamps (controls density)
 
-const skidCanvas  = document.createElement('canvas');
-skidCanvas.width  = skidCanvas.height = SKID_CANVAS_SIZE;
-const skidCtx     = skidCanvas.getContext('2d');
-skidCtx.fillStyle = 'rgba(0,0,0,0)';
-skidCtx.fillRect(0, 0, SKID_CANVAS_SIZE, SKID_CANVAS_SIZE);
+const skidGeo = new THREE.PlaneGeometry(SKID_MARK_W, SKID_MARK_H);
+skidGeo.rotateX(-Math.PI / 2); // lay flat
 
-const skidTexture  = new THREE.CanvasTexture(skidCanvas);
-const skidMaterial = new THREE.MeshBasicMaterial({
-  map:         skidTexture,
-  transparent: true,
-  depthWrite:  false,
-  opacity:     1,
-});
-const skidMesh = new THREE.Mesh(
-  new THREE.PlaneGeometry(SKID_WORLD_SIZE, SKID_WORLD_SIZE),
-  skidMaterial
-);
-skidMesh.rotation.x = -Math.PI / 2;
-skidMesh.position.y = 0.01;   // just above ground to avoid z-fighting
-scene.add(skidMesh);
+// All marks share one material pool entry each — cheap, no texture needed
+const skidPool = [];
+for(let i = 0; i < SKID_POOL_SIZE; i++) {
+  const mat  = new THREE.MeshBasicMaterial({
+    color:       0x111008,
+    transparent: true,
+    opacity:     0,
+    depthWrite:  false,
+  });
+  const mesh = new THREE.Mesh(skidGeo, mat);
+  mesh.visible = false;
+  mesh.renderOrder = 1;
+  scene.add(mesh);
+  skidPool.push({ mesh, opacity: 0, active: false });
+}
+let skidPoolHead = 0;  // next slot to use (ring buffer)
+let skidSpawnTick = 0;
 
-let skidFadeTick = 0;
-
-// Convert world XZ to canvas UV pixel coords
-function worldToSkidUV(wx, wz) {
-  const u = (wx + SKID_WORLD_SIZE / 2) / SKID_WORLD_SIZE;
-  const v = (wz + SKID_WORLD_SIZE / 2) / SKID_WORLD_SIZE;
-  return [u * SKID_CANVAS_SIZE, v * SKID_CANVAS_SIZE];
+function spawnSkid(wx, wy, wz, angle) {
+  const slot = skidPool[skidPoolHead];
+  skidPoolHead = (skidPoolHead + 1) % SKID_POOL_SIZE;
+  slot.mesh.position.set(wx, wy + 0.04, wz);
+  slot.mesh.rotation.y = angle;
+  slot.opacity = 0.7;
+  slot.mesh.material.opacity = 0.7;
+  slot.mesh.visible = true;
+  slot.active = true;
 }
 
-// Stamp a skid mark at a world position with a given heading angle
-function stampSkid(wx, wz, angle) {
-  const [cx, cy] = worldToSkidUV(wx, wz);
-  skidCtx.save();
-  skidCtx.translate(cx, cy);
-  skidCtx.rotate(angle);   // align mark with car heading
-  skidCtx.fillStyle = 'rgba(20,16,12,0.55)';
-  skidCtx.fillRect(-SKID_MARK_W/2, -SKID_MARK_H/2, SKID_MARK_W, SKID_MARK_H);
-  skidCtx.restore();
-  skidTexture.needsUpdate = true;
-}
-
-// Fade existing marks by drawing a near-transparent white rect over the whole canvas
-function fadeSkids() {
-  skidCtx.globalCompositeOperation = 'destination-out';
-  skidCtx.fillStyle = `rgba(0,0,0,${SKID_FADE_RATE})`;
-  skidCtx.fillRect(0, 0, SKID_CANVAS_SIZE, SKID_CANVAS_SIZE);
-  skidCtx.globalCompositeOperation = 'source-over';
-  skidTexture.needsUpdate = true;
+function tickSkids() {
+  for(const slot of skidPool) {
+    if(!slot.active) continue;
+    slot.opacity -= SKID_FADE_RATE;
+    if(slot.opacity <= 0) {
+      slot.opacity = 0;
+      slot.mesh.visible = false;
+      slot.active = false;
+    } else {
+      slot.mesh.material.opacity = slot.opacity;
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1081,8 +1073,14 @@ function updateDriftSound(isDrifting) {
     const lp = audioCtx.createBiquadFilter();
     lp.type = 'lowpass'; lp.frequency.value = 5500; lp.Q.value = 0.5;
 
+    // Bring the peak boost way down and lower the centre frequency
+    // so it sits in the upper-mid range (~1.2kHz) not the harsh presence band
+    peak.frequency.value = 1200;
+    peak.Q.value         = 0.9;
+    peak.gain.value      = 8;   // was 18 — much gentler lift
+
     const g = audioCtx.createGain();
-    g.gain.value = 0.28;
+    g.gain.value = 0.18;
 
     driftSoundNode.connect(hp);
     hp.connect(peak);
@@ -1337,12 +1335,18 @@ function physicsTick() {
 
     speed *= (1 - DRIFT_FRICTION);
 
-    // Stamp skid marks at the approximate rear-axle position
-    const rearOffset = fd.clone().multiplyScalar(-1.6);
-    const rx = carModel.position.x + rearOffset.x;
-    const rz = carModel.position.z + rearOffset.z;
-    // Angle: car yaw in canvas space (canvas Y = world Z, so negate)
-    stampSkid(rx, rz, -carYaw);
+    // Stamp skid marks at the rear axle, every SKID_SPAWN_EVERY ticks
+    skidSpawnTick++;
+    if(skidSpawnTick >= SKID_SPAWN_EVERY) {
+      skidSpawnTick = 0;
+      const rearOffset = fd.clone().multiplyScalar(-1.6);
+      spawnSkid(
+        carModel.position.x + rearOffset.x,
+        carModel.position.y,
+        carModel.position.z + rearOffset.z,
+        carYaw
+      );
+    }
     wasDrifting = true;
 
   } else {
@@ -1358,12 +1362,8 @@ function physicsTick() {
   const tv = fv.clone().add(lateralVel); tv.y = 0;
   carModel.position.add(tv);
 
-  // Fade skid marks every N ticks
-  skidFadeTick++;
-  if(skidFadeTick >= SKID_FADE_EVERY) {
-    fadeSkids();
-    skidFadeTick = 0;
-  }
+  // Fade all active skid marks
+  tickSkids();
 
   // Sync rotation to mesh before collision so raycasts use the correct orientation
   carModel.rotation.y = carYaw;
