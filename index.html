@@ -888,8 +888,11 @@ const TURN_SPEED_PENALTY = 0.55;
 const DRIFT_TURN_BOOST = 1.2;
 
 let lateralVel = new THREE.Vector3();
-const DRIFT_GRIP=0.18, DRIFT_GRIP_SLIDE=0.06, DRIFT_BUILDUP=0.025;
-const NATURAL_BLEED=0.012, DRIFT_FRICTION=0.0015;
+const DRIFT_GRIP=0.18, DRIFT_GRIP_SLIDE=0.006, DRIFT_BUILDUP=0.025;
+const NATURAL_BLEED=0.012, DRIFT_FRICTION=0.0008;
+// How strongly steer input rotates the slide direction mid-drift.
+// Higher = easier to catch/widen a drift with the wheel. 0.008 is subtle but responsive.
+const DRIFT_STEER_INFLUENCE = 0.008;
 const baseOffset=new THREE.Vector3(0,3,8), lookOffset=new THREE.Vector3(0,1,0);
 const smoothedCarPos=new THREE.Vector3();
 const _spinAxis=new THREE.Vector3(1,0,0), _spinQ=new THREE.Quaternion();
@@ -1176,17 +1179,50 @@ function physicsTick() {
   const fv = fd.clone().multiplyScalar(speed);
 
   if(isDrifting) {
+    // ── Momentum-based drift ──────────────────────────────────────────
+    // Spacebar freezes lateral grip so the slide persists on momentum.
+    // Steering rotates the car body relative to the slide, giving the
+    // classic counter-steer feel: turn right to correct a left drift.
+    //
+    // On drift ENTRY (lateralVel is small), steer input seeds the initial
+    // slide so the car breaks away in the right direction.
+    // Once sliding, steer input gently nudges lateralVel direction without
+    // killing magnitude — you're steering the drift, not adding more.
+
     const rd = new THREE.Vector3(1,0,0).applyQuaternion(physicsQuat);
-    lateralVel.addScaledVector(rd, si * DRIFT_BUILDUP * speedFactor);
-    const ml = Math.abs(speed) * 0.9;
-    if(lateralVel.length() > ml) lateralVel.setLength(ml);
+    const currentLateralMag = lateralVel.length();
+
+    if(currentLateralMag < maxSpeed * 0.08) {
+      // Drift entry — build initial slide from steer input
+      lateralVel.addScaledVector(rd, si * DRIFT_BUILDUP * speedFactor);
+    } else {
+      // Mid-drift — steer nudges the slide direction (rotates lateralVel
+      // toward/away from car's right vector) without adding raw magnitude
+      const nudge = si * DRIFT_STEER_INFLUENCE * speedFactor;
+      lateralVel.addScaledVector(rd, nudge);
+      // Re-clamp to preserve magnitude (direction change only)
+      if(lateralVel.length() > currentLateralMag * 1.04) {
+        lateralVel.setLength(currentLateralMag);
+      }
+    }
+
+    // Very low grip while spacebar held — slide persists on momentum
     lateralVel.multiplyScalar(1 - DRIFT_GRIP_SLIDE);
+
+    // Cap slide magnitude relative to speed so it naturally shrinks when slowing
+    const ml = Math.abs(speed) * 0.92;
+    if(lateralVel.length() > ml) lateralVel.setLength(ml);
+
+    // Small speed cost on drift — makes the drift/no-drift choice meaningful
     speed *= (1 - DRIFT_FRICTION);
+
   } else {
+    // Normal cornering: small natural bleed builds up through fast turns
     if(si !== 0 && Math.abs(speed) > maxSpeed * 0.2) {
       const rd = new THREE.Vector3(1,0,0).applyQuaternion(physicsQuat);
       lateralVel.addScaledVector(rd, si * NATURAL_BLEED * speedFactor);
     }
+    // Tyres grip back up quickly when spacebar released
     lateralVel.multiplyScalar(1 - DRIFT_GRIP);
   }
 
