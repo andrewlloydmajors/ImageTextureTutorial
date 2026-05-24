@@ -871,11 +871,12 @@ function resolveWallRaycasts() {
     if (ir < 0.5) {
       speed *= (1 - ir*0.6); lateralVel.set(0,0,0);
       carModel.rotation.y += ir*1.4*Math.sign(fd.clone().cross(wn).y);
+      playSound('bump');
     } else {
       speed = -speed * Math.max(0,(1-(ir-0.5)*0.8)*0.25);
       const ws = fd.clone().cross(wn).y;
       carModel.rotation.y += (ir-0.5)*1.8*(Math.abs(ws)>0.01?Math.sign(ws):1);
-      lateralVel.set(0,0,0); playSound('bump');
+      lateralVel.set(0,0,0); playSound('bump_hard');
     }
     carModel.position.addScaledVector(wn, lo.length()+0.3); break;
   }
@@ -1027,21 +1028,62 @@ function updateEngineSound(spd, isDrifting) {
   // LFO depth: very subtle — just enough to feel alive, not drowning
   engineLFOGain.gain.setTargetAtTime(0.8 + n * 2.5, t, 0.08);
 }
+function playThud() {
+  // Low dull thump: a short sine burst at ~60Hz with fast decay,
+  // filtered through a low-pass to keep it bassy and remove click.
+  if(!soundUnlocked) return;
+  const sr  = audioCtx.sampleRate;
+  const dur = 0.22;  // seconds
+  const buf = audioCtx.createBuffer(1, sr * dur, sr);
+  const d   = buf.getChannelData(0);
+  for(let i = 0; i < d.length; i++) {
+    const t   = i / sr;
+    const env = Math.exp(-t * 18);   // fast exponential decay
+    // Pitch starts at 90Hz and drops quickly — gives the "thud" character
+    const freq = 90 * Math.exp(-t * 12);
+    d[i] = Math.sin(2 * Math.PI * freq * t) * env * 0.9;
+  }
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  // Low-pass keeps it thumpy, not clicky
+  const lp = audioCtx.createBiquadFilter();
+  lp.type = 'lowpass'; lp.frequency.value = 180;
+  const g = audioCtx.createGain();
+  g.gain.value = 0.7;
+  src.connect(lp); lp.connect(g); g.connect(audioCtx.destination);
+  src.start();
+}
+
 function playSound(type) {
   if(!soundUnlocked) return;
-  const buf=audioCtx.createBuffer(1,audioCtx.sampleRate*0.15,audioCtx.sampleRate);
-  const d=buf.getChannelData(0);
-  if(type==='bump') {
-    for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,2)*0.25;
+  if(type === 'bump') {
+    // Glancing hit: just the thud
+    playThud();
+  } else if(type === 'bump_hard') {
+    // Perpendicular hit: thud + high scrape noise on top
+    playThud();
+    const sr  = audioCtx.sampleRate;
+    const buf = audioCtx.createBuffer(1, sr * 0.12, sr);
+    const d   = buf.getChannelData(0);
+    for(let i = 0; i < d.length; i++)
+      d[i] = (Math.random()*2-1) * Math.pow(1 - i/(sr*0.12), 1.5) * 0.3;
+    const src = audioCtx.createBufferSource(); src.buffer = buf;
+    const hp = audioCtx.createBiquadFilter();
+    hp.type = 'highpass'; hp.frequency.value = 1800;
+    const g = audioCtx.createGain(); g.gain.value = 0.35;
+    src.connect(hp); hp.connect(g); g.connect(audioCtx.destination);
+    src.start();
   } else if(type==='lap') {
     const sr=audioCtx.sampleRate;
+    const buf=audioCtx.createBuffer(1,sr*0.15,sr);
+    const d=buf.getChannelData(0);
     for(let i=0;i<d.length;i++){
       const t=i/sr, env=Math.pow(1-i/d.length,0.5);
       d[i]=Math.sin(2*Math.PI*880*t)*env*0.12+Math.sin(2*Math.PI*1320*t)*env*0.08;
     }
+    const src=audioCtx.createBufferSource(); src.buffer=buf;
+    src.connect(audioCtx.destination); src.start();
   }
-  const src=audioCtx.createBufferSource(); src.buffer=buf;
-  src.connect(audioCtx.destination); src.start();
 }
 // Tire squeal: pure broadband white noise shaped by two filters.
 // A peaking EQ boosts the mid-high band (1.5–4kHz) where rubber squeal
@@ -1080,7 +1122,7 @@ function updateDriftSound(isDrifting) {
     peak.gain.value      = 8;   // was 18 — much gentler lift
 
     const g = audioCtx.createGain();
-    g.gain.value = 0.04;
+    g.gain.value = 0.06;
 
     driftSoundNode.connect(hp);
     hp.connect(peak);
