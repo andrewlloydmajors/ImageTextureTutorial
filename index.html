@@ -983,18 +983,35 @@ function playSound(type) {
   const src=audioCtx.createBufferSource(); src.buffer=buf;
   src.connect(audioCtx.destination); src.start();
 }
+// Drift sound uses a persistent looping node with a gain that fades
+// in/out smoothly rather than starting/stopping abruptly.
+let driftGainNode = null;
+
+function initDriftSound() {
+  if(driftGainNode) return;
+  const buf = audioCtx.createBuffer(1, audioCtx.sampleRate, audioCtx.sampleRate);
+  const d   = buf.getChannelData(0);
+  for(let i = 0; i < d.length; i++) d[i] = (Math.random()*2-1) * 0.08;
+  driftSoundNode = audioCtx.createBufferSource();
+  driftSoundNode.buffer = buf;
+  driftSoundNode.loop   = true;
+  const f = audioCtx.createBiquadFilter();
+  f.type = 'bandpass'; f.frequency.value = 1200; f.Q.value = 0.8;
+  driftGainNode = audioCtx.createGain();
+  driftGainNode.gain.value = 0;   // start silent
+  driftSoundNode.connect(f);
+  f.connect(driftGainNode);
+  driftGainNode.connect(audioCtx.destination);
+  driftSoundNode.start();
+}
+
 function updateDriftSound(isDrifting) {
   if(!soundUnlocked) return;
-  if(isDrifting && !driftSoundNode) {
-    const buf=audioCtx.createBuffer(1,audioCtx.sampleRate,audioCtx.sampleRate);
-    const d=buf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*0.08;
-    driftSoundNode=audioCtx.createBufferSource(); driftSoundNode.buffer=buf; driftSoundNode.loop=true;
-    const g=audioCtx.createGain(); g.gain.value=0.18;
-    const f=audioCtx.createBiquadFilter(); f.type='bandpass'; f.frequency.value=1200; f.Q.value=0.8;
-    driftSoundNode.connect(f); f.connect(g); g.connect(audioCtx.destination); driftSoundNode.start();
-  } else if(!isDrifting && driftSoundNode) {
-    driftSoundNode.stop(); driftSoundNode=null;
-  }
+  if(!driftGainNode) initDriftSound();
+  const target = isDrifting ? 0.18 : 0;
+  // timeConstant: 0.18s fade-in, 0.28s fade-out — build up slower than decay
+  const tc = isDrifting ? 0.18 : 0.28;
+  driftGainNode.gain.setTargetAtTime(target, audioCtx.currentTime, tc);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1198,8 +1215,18 @@ function physicsTick() {
     const currentLateralMag = lateralVel.length();
 
     if(currentLateralMag < maxSpeed * 0.08) {
-      // Drift entry — build initial slide from steer input
-      lateralVel.addScaledVector(rd, si * DRIFT_BUILDUP * speedFactor);
+      // Drift entry — decompose total current velocity (forward + any existing
+      // lateral) into the car's new facing frame, and carry the sideways
+      // component as the starting lateralVel. This means the car continues
+      // moving in the direction it was already going while the body rotates —
+      // the classic "square up to the corner and let momentum do the work" feel.
+      const totalVelNow = fd.clone().multiplyScalar(speed).add(lateralVel);
+      const forwardComp = totalVelNow.dot(fd);
+      const lateralComp = totalVelNow.dot(rd);
+      // Blend: keep the velocity-derived lateral, add a small steer seed
+      // so initiating with a turn still feels responsive
+      lateralVel.copy(rd).multiplyScalar(lateralComp + si * DRIFT_BUILDUP * speedFactor);
+      speed = forwardComp; // re-align speed to new facing
     } else {
       // Mid-drift — steer nudges the slide direction (rotates lateralVel
       // toward/away from car's right vector) without adding raw magnitude
