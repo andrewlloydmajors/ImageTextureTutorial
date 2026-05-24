@@ -962,10 +962,10 @@ function updateEngineSound(spd, isDrifting) {
   const baseHz = 55 + n * 130 + (isDrifting ? 25 : 0);
   engineOsc.frequency.setTargetAtTime(baseHz, t, 0.05);
   engineGain.gain.setTargetAtTime(n * 0.042 + 0.008, t, 0.05);
-  // LFO rate: 4 Hz at idle → 18 Hz at full speed (engine roughness)
-  engineLFO.frequency.setTargetAtTime(4 + n * 14, t, 0.08);
-  // LFO depth: gentle wobble at low speed, stronger rumble at high speed
-  engineLFOGain.gain.setTargetAtTime(3 + n * 18, t, 0.08);
+  // LFO rate: 6 Hz at idle → 22 Hz at full speed (engine roughness)
+  engineLFO.frequency.setTargetAtTime(6 + n * 16, t, 0.08);
+  // LFO depth: very subtle — just enough to feel alive, not drowning
+  engineLFOGain.gain.setTargetAtTime(0.8 + n * 2.5, t, 0.08);
 }
 function playSound(type) {
   if(!soundUnlocked) return;
@@ -1168,7 +1168,12 @@ function physicsTick() {
   const effectiveTurn  = BASE_TURN * Math.max(0, speedPenalty) * (isDrifting ? DRIFT_TURN_BOOST : 1);
   const si             = (keys['a'] ? 1 : 0) - (keys['d'] ? 1 : 0);
   const steerTarget    = si * effectiveTurn * speedFactor * turnDir;
-  steerRate += (steerTarget - steerRate) * (si !== 0 ? STEER_BUILDUP : STEER_FALLOFF);
+  // While drifting with no steer input, decay steerRate very slowly so the
+  // car body holds its angle — release the turn key mid-drift and you keep curving.
+  const steerDecay = (si !== 0)
+    ? STEER_BUILDUP
+    : (isDrifting ? STEER_FALLOFF * 0.06 : STEER_FALLOFF);
+  steerRate += (steerTarget - steerRate) * steerDecay;
   carYaw += steerRate;
 
   // Derive quaternion from carYaw — never read back from carModel to avoid
