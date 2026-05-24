@@ -707,6 +707,7 @@ function resetCar() {
 let pbGhostFrames = [], crGhostFrames = [];
 let currentLapGhostFrames = [];
 let pendingGhostFrames = [];  // ghost for the lap just completed, saved if player submits
+let wasDrifting = false;      // tracks drift transition for entry velocity seeding
 let ghostPlaybackPBFrame  = 0, ghostPlaybackCRFrame = 0;
 let pbGhostMesh = null,        crGhostMesh = null;
 let ghostsInitialized = false;
@@ -960,8 +961,9 @@ function updateEngineSound(spd, isDrifting) {
   const n   = Math.abs(spd) / maxSpeed;
   const t   = audioCtx.currentTime;
   const baseHz = 55 + n * 130 + (isDrifting ? 25 : 0);
-  engineOsc.frequency.setTargetAtTime(baseHz, t, 0.05);
-  engineGain.gain.setTargetAtTime(n * 0.042 + 0.008, t, 0.05);
+  // 0.3s time constant — gradual rev-up and rev-down
+  engineOsc.frequency.setTargetAtTime(baseHz, t, 0.3);
+  engineGain.gain.setTargetAtTime(n * 0.042 + 0.008, t, 0.3);
   // LFO rate: 6 Hz at idle → 22 Hz at full speed (engine roughness)
   engineLFO.frequency.setTargetAtTime(6 + n * 16, t, 0.08);
   // LFO depth: very subtle — just enough to feel alive, not drowning
@@ -1200,61 +1202,58 @@ function physicsTick() {
   const fd = new THREE.Vector3(0,0,-1).applyQuaternion(physicsQuat);
   const fv = fd.clone().multiplyScalar(speed);
 
+  const rd = new THREE.Vector3(1,0,0).applyQuaternion(physicsQuat);
+
   if(isDrifting) {
-    // ── Momentum-based drift ──────────────────────────────────────────
-    // Spacebar freezes lateral grip so the slide persists on momentum.
-    // Steering rotates the car body relative to the slide, giving the
-    // classic counter-steer feel: turn right to correct a left drift.
-    //
-    // On drift ENTRY (lateralVel is small), steer input seeds the initial
-    // slide so the car breaks away in the right direction.
-    // Once sliding, steer input gently nudges lateralVel direction without
-    // killing magnitude — you're steering the drift, not adding more.
+    if(!wasDrifting) {
+      // ── Drift ENTRY (transition tick only) ───────────────────────────
+      // The car is going forward. We want it to continue going in that
+      // same world direction while the body starts rotating — creating the
+      // visible angle between facing and travel direction.
+      //
+      // Decompose the current total velocity into the car's facing frame.
+      // The sideways component becomes the starting lateralVel; forward
+      // component stays as speed. If the car was going perfectly straight,
+      // the decomposition gives a small lateral seed from steer input plus
+      // a kick proportional to speed — enough to start the slide visibly.
+      const totalVel = fd.clone().multiplyScalar(speed).add(lateralVel);
+      const forwardComp = totalVel.dot(fd);
+      const lateralComp = totalVel.dot(rd);
 
-    const rd = new THREE.Vector3(1,0,0).applyQuaternion(physicsQuat);
-    const currentLateralMag = lateralVel.length();
-
-    if(currentLateralMag < maxSpeed * 0.08) {
-      // Drift entry — decompose total current velocity (forward + any existing
-      // lateral) into the car's new facing frame, and carry the sideways
-      // component as the starting lateralVel. This means the car continues
-      // moving in the direction it was already going while the body rotates —
-      // the classic "square up to the corner and let momentum do the work" feel.
-      const totalVelNow = fd.clone().multiplyScalar(speed).add(lateralVel);
-      const forwardComp = totalVelNow.dot(fd);
-      const lateralComp = totalVelNow.dot(rd);
-      // Blend: keep the velocity-derived lateral, add a small steer seed
-      // so initiating with a turn still feels responsive
-      lateralVel.copy(rd).multiplyScalar(lateralComp + si * DRIFT_BUILDUP * speedFactor);
-      speed = forwardComp; // re-align speed to new facing
+      // Seed: carry existing lateral + steer input kick + speed-scaled entry push
+      // The speed-scaled push is what gives you visible sideways movement at entry
+      const entrySeed = lateralComp + si * DRIFT_BUILDUP + Math.sign(si || 1) * speedFactor * 0.04;
+      lateralVel.copy(rd).multiplyScalar(entrySeed);
+      speed = forwardComp;
     } else {
-      // Mid-drift — steer nudges the slide direction (rotates lateralVel
-      // toward/away from car's right vector) without adding raw magnitude
-      const nudge = si * DRIFT_STEER_INFLUENCE * speedFactor;
-      lateralVel.addScaledVector(rd, nudge);
-      // Re-clamp to preserve magnitude (direction change only)
-      if(lateralVel.length() > currentLateralMag * 1.04) {
-        lateralVel.setLength(currentLateralMag);
+      // ── Mid-drift: steer rotates slide direction, doesn't add magnitude ──
+      // This is counter-steer: turning right when going left-sideways
+      // rotates lateralVel back toward forward, catching the drift.
+      const currentMag = lateralVel.length();
+      if(currentMag > 0.001) {
+        lateralVel.addScaledVector(rd, si * DRIFT_STEER_INFLUENCE * speedFactor);
+        // Preserve magnitude — we're changing direction, not adding velocity
+        lateralVel.setLength(currentMag);
       }
     }
 
-    // Very low grip while spacebar held — slide persists on momentum
+    // Very low grip — slide persists on momentum while spacebar held
     lateralVel.multiplyScalar(1 - DRIFT_GRIP_SLIDE);
 
-    // Cap slide magnitude relative to speed so it naturally shrinks when slowing
+    // Cap relative to speed so slide shrinks naturally as car slows
     const ml = Math.abs(speed) * 0.92;
     if(lateralVel.length() > ml) lateralVel.setLength(ml);
 
-    // Small speed cost on drift — makes the drift/no-drift choice meaningful
     speed *= (1 - DRIFT_FRICTION);
+    wasDrifting = true;
 
   } else {
-    // Normal cornering: small natural bleed builds up through fast turns
+    wasDrifting = false;
+    // Natural cornering bleed through fast corners
     if(si !== 0 && Math.abs(speed) > maxSpeed * 0.2) {
-      const rd = new THREE.Vector3(1,0,0).applyQuaternion(physicsQuat);
       lateralVel.addScaledVector(rd, si * NATURAL_BLEED * speedFactor);
     }
-    // Tyres grip back up quickly when spacebar released
+    // Tyres grip up — lateral velocity bleeds back to zero
     lateralVel.multiplyScalar(1 - DRIFT_GRIP);
   }
 
