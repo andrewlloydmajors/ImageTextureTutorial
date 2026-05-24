@@ -625,6 +625,72 @@ ground.receiveShadow = true;
 scene.add(ground);
 
 // ═══════════════════════════════════════════════════════
+// SKID MARKS
+// ═══════════════════════════════════════════════════════
+// We stamp dark marks onto a CanvasTexture that sits just above the ground.
+// Each mark is a small rectangle drawn in canvas 2D space (UV space mapped
+// to the ground plane). Marks fade by periodically reducing globalAlpha on
+// a fill pass. This avoids storing thousands of geometry objects.
+
+const SKID_CANVAS_SIZE = 2048;  // pixels — higher = sharper marks
+const SKID_WORLD_SIZE  = 6000;  // must match PlaneGeometry size
+const SKID_FADE_RATE   = 0.003; // opacity subtracted per fade tick (lower = longer marks)
+const SKID_FADE_EVERY  = 4;     // physics ticks between fade passes
+const SKID_MARK_W      = 6;     // mark width in canvas pixels
+const SKID_MARK_H      = 14;    // mark length in canvas pixels
+
+const skidCanvas  = document.createElement('canvas');
+skidCanvas.width  = skidCanvas.height = SKID_CANVAS_SIZE;
+const skidCtx     = skidCanvas.getContext('2d');
+skidCtx.fillStyle = 'rgba(0,0,0,0)';
+skidCtx.fillRect(0, 0, SKID_CANVAS_SIZE, SKID_CANVAS_SIZE);
+
+const skidTexture  = new THREE.CanvasTexture(skidCanvas);
+const skidMaterial = new THREE.MeshBasicMaterial({
+  map:         skidTexture,
+  transparent: true,
+  depthWrite:  false,
+  opacity:     1,
+});
+const skidMesh = new THREE.Mesh(
+  new THREE.PlaneGeometry(SKID_WORLD_SIZE, SKID_WORLD_SIZE),
+  skidMaterial
+);
+skidMesh.rotation.x = -Math.PI / 2;
+skidMesh.position.y = 0.01;   // just above ground to avoid z-fighting
+scene.add(skidMesh);
+
+let skidFadeTick = 0;
+
+// Convert world XZ to canvas UV pixel coords
+function worldToSkidUV(wx, wz) {
+  const u = (wx + SKID_WORLD_SIZE / 2) / SKID_WORLD_SIZE;
+  const v = (wz + SKID_WORLD_SIZE / 2) / SKID_WORLD_SIZE;
+  return [u * SKID_CANVAS_SIZE, v * SKID_CANVAS_SIZE];
+}
+
+// Stamp a skid mark at a world position with a given heading angle
+function stampSkid(wx, wz, angle) {
+  const [cx, cy] = worldToSkidUV(wx, wz);
+  skidCtx.save();
+  skidCtx.translate(cx, cy);
+  skidCtx.rotate(angle);   // align mark with car heading
+  skidCtx.fillStyle = 'rgba(20,16,12,0.55)';
+  skidCtx.fillRect(-SKID_MARK_W/2, -SKID_MARK_H/2, SKID_MARK_W, SKID_MARK_H);
+  skidCtx.restore();
+  skidTexture.needsUpdate = true;
+}
+
+// Fade existing marks by drawing a near-transparent white rect over the whole canvas
+function fadeSkids() {
+  skidCtx.globalCompositeOperation = 'destination-out';
+  skidCtx.fillStyle = `rgba(0,0,0,${SKID_FADE_RATE})`;
+  skidCtx.fillRect(0, 0, SKID_CANVAS_SIZE, SKID_CANVAS_SIZE);
+  skidCtx.globalCompositeOperation = 'source-over';
+  skidTexture.needsUpdate = true;
+}
+
+// ═══════════════════════════════════════════════════════
 // CAR
 // ═══════════════════════════════════════════════════════
 let carModel = null;
@@ -985,51 +1051,43 @@ function playSound(type) {
   const src=audioCtx.createBufferSource(); src.buffer=buf;
   src.connect(audioCtx.destination); src.start();
 }
-// Tire squeal: a cluster of slightly detuned oscillators through a
-// high-Q bandpass gives the sharp rubber-peel pitch without sounding
-// like a sine wave. Mixed with a thin noise layer for texture.
-const driftOscFreq = 780;  // Hz — base squeal pitch
-
+// Tire squeal: pure broadband white noise shaped by two filters.
+// A peaking EQ boosts the mid-high band (1.5–4kHz) where rubber squeal
+// lives, and a high-shelf cuts the very top so it doesn't sound digital.
+// No pitched oscillators — real tire noise is inharmonic friction, not a tone.
 function updateDriftSound(isDrifting) {
   if(!soundUnlocked) return;
   if(isDrifting && !driftSoundNode) {
     const sr  = audioCtx.sampleRate;
-    const dur = 2;  // loop buffer length in seconds
-
-    // Mix: three slightly detuned sawtooth-ish waveforms + thin noise
-    const buf = audioCtx.createBuffer(1, sr * dur, sr);
+    // White noise buffer
+    const buf = audioCtx.createBuffer(1, sr * 2, sr);
     const d   = buf.getChannelData(0);
-    const f1  = driftOscFreq,         // fundamental
-          f2  = driftOscFreq * 1.007, // slight detune for beating/width
-          f3  = driftOscFreq * 0.994;
-    for(let i = 0; i < d.length; i++) {
-      const t = i / sr;
-      // Sawtooth approximation via summed harmonics (gives edge over sine)
-      const saw1 = Math.sin(2*Math.PI*f1*t) * 0.5
-                 + Math.sin(2*Math.PI*f1*2*t) * 0.25
-                 + Math.sin(2*Math.PI*f1*3*t) * 0.12;
-      const saw2 = Math.sin(2*Math.PI*f2*t) * 0.4
-                 + Math.sin(2*Math.PI*f2*2*t) * 0.18;
-      const saw3 = Math.sin(2*Math.PI*f3*t) * 0.35;
-      const noise = (Math.random()*2-1) * 0.06; // thin noise for texture
-      d[i] = (saw1 + saw2 + saw3 + noise) * 0.09;
-    }
+    for(let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
 
     driftSoundNode = audioCtx.createBufferSource();
     driftSoundNode.buffer = buf;
     driftSoundNode.loop   = true;
 
-    // Narrow bandpass centered on the squeal frequency keeps it sharp
-    const bpf = audioCtx.createBiquadFilter();
-    bpf.type = 'bandpass';
-    bpf.frequency.value = driftOscFreq;
-    bpf.Q.value = 4;
+    // High-pass: cut low rumble below ~400Hz
+    const hp = audioCtx.createBiquadFilter();
+    hp.type = 'highpass'; hp.frequency.value = 400; hp.Q.value = 0.7;
+
+    // Peaking EQ: boost the squeal band around 2.2kHz
+    const peak = audioCtx.createBiquadFilter();
+    peak.type = 'peaking'; peak.frequency.value = 2200;
+    peak.Q.value = 1.4; peak.gain.value = 18;
+
+    // Low-pass: soften the top end so it doesn't sound like static
+    const lp = audioCtx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 5500; lp.Q.value = 0.5;
 
     const g = audioCtx.createGain();
-    g.gain.value = 0.55;
+    g.gain.value = 0.28;
 
-    driftSoundNode.connect(bpf);
-    bpf.connect(g);
+    driftSoundNode.connect(hp);
+    hp.connect(peak);
+    peak.connect(lp);
+    lp.connect(g);
     g.connect(audioCtx.destination);
     driftSoundNode.start();
   } else if(!isDrifting && driftSoundNode) {
@@ -1278,6 +1336,13 @@ function physicsTick() {
     if(lateralVel.length() > ml) lateralVel.setLength(ml);
 
     speed *= (1 - DRIFT_FRICTION);
+
+    // Stamp skid marks at the approximate rear-axle position
+    const rearOffset = fd.clone().multiplyScalar(-1.6);
+    const rx = carModel.position.x + rearOffset.x;
+    const rz = carModel.position.z + rearOffset.z;
+    // Angle: car yaw in canvas space (canvas Y = world Z, so negate)
+    stampSkid(rx, rz, -carYaw);
     wasDrifting = true;
 
   } else {
@@ -1292,6 +1357,13 @@ function physicsTick() {
 
   const tv = fv.clone().add(lateralVel); tv.y = 0;
   carModel.position.add(tv);
+
+  // Fade skid marks every N ticks
+  skidFadeTick++;
+  if(skidFadeTick >= SKID_FADE_EVERY) {
+    fadeSkids();
+    skidFadeTick = 0;
+  }
 
   // Sync rotation to mesh before collision so raycasts use the correct orientation
   carModel.rotation.y = carYaw;
