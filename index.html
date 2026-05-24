@@ -985,17 +985,56 @@ function playSound(type) {
   const src=audioCtx.createBufferSource(); src.buffer=buf;
   src.connect(audioCtx.destination); src.start();
 }
+// Tire squeal: a cluster of slightly detuned oscillators through a
+// high-Q bandpass gives the sharp rubber-peel pitch without sounding
+// like a sine wave. Mixed with a thin noise layer for texture.
+const driftOscFreq = 780;  // Hz — base squeal pitch
+
 function updateDriftSound(isDrifting) {
   if(!soundUnlocked) return;
   if(isDrifting && !driftSoundNode) {
-    const buf=audioCtx.createBuffer(1,audioCtx.sampleRate,audioCtx.sampleRate);
-    const d=buf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*0.08;
-    driftSoundNode=audioCtx.createBufferSource(); driftSoundNode.buffer=buf; driftSoundNode.loop=true;
-    const g=audioCtx.createGain(); g.gain.value=0.18;
-    const f=audioCtx.createBiquadFilter(); f.type='bandpass'; f.frequency.value=1200; f.Q.value=0.8;
-    driftSoundNode.connect(f); f.connect(g); g.connect(audioCtx.destination); driftSoundNode.start();
+    const sr  = audioCtx.sampleRate;
+    const dur = 2;  // loop buffer length in seconds
+
+    // Mix: three slightly detuned sawtooth-ish waveforms + thin noise
+    const buf = audioCtx.createBuffer(1, sr * dur, sr);
+    const d   = buf.getChannelData(0);
+    const f1  = driftOscFreq,         // fundamental
+          f2  = driftOscFreq * 1.007, // slight detune for beating/width
+          f3  = driftOscFreq * 0.994;
+    for(let i = 0; i < d.length; i++) {
+      const t = i / sr;
+      // Sawtooth approximation via summed harmonics (gives edge over sine)
+      const saw1 = Math.sin(2*Math.PI*f1*t) * 0.5
+                 + Math.sin(2*Math.PI*f1*2*t) * 0.25
+                 + Math.sin(2*Math.PI*f1*3*t) * 0.12;
+      const saw2 = Math.sin(2*Math.PI*f2*t) * 0.4
+                 + Math.sin(2*Math.PI*f2*2*t) * 0.18;
+      const saw3 = Math.sin(2*Math.PI*f3*t) * 0.35;
+      const noise = (Math.random()*2-1) * 0.06; // thin noise for texture
+      d[i] = (saw1 + saw2 + saw3 + noise) * 0.09;
+    }
+
+    driftSoundNode = audioCtx.createBufferSource();
+    driftSoundNode.buffer = buf;
+    driftSoundNode.loop   = true;
+
+    // Narrow bandpass centered on the squeal frequency keeps it sharp
+    const bpf = audioCtx.createBiquadFilter();
+    bpf.type = 'bandpass';
+    bpf.frequency.value = driftOscFreq;
+    bpf.Q.value = 4;
+
+    const g = audioCtx.createGain();
+    g.gain.value = 0.55;
+
+    driftSoundNode.connect(bpf);
+    bpf.connect(g);
+    g.connect(audioCtx.destination);
+    driftSoundNode.start();
   } else if(!isDrifting && driftSoundNode) {
-    driftSoundNode.stop(); driftSoundNode=null;
+    driftSoundNode.stop();
+    driftSoundNode = null;
   }
 }
 
@@ -1203,11 +1242,10 @@ function physicsTick() {
       const forwardComp = totalVel.dot(fd);
       const lateralComp = totalVel.dot(rd);
 
-      // Seed: carry existing lateral + steer-direction kick + strong speed-scaled push.
-      // The speed-scaled push is the main source of visible sideways movement.
-      // Use steer direction as the slide direction; if no steer, default to right.
-      const slideDir = si !== 0 ? si : 1;
-      const entrySeed = lateralComp + slideDir * (DRIFT_BUILDUP + speedFactor * 0.12);
+      // Seed: carry existing lateral + steer-direction kick + speed-scaled push.
+      // If no steer input, only carry momentum already in the lateral direction —
+      // pressing drift while going straight should not push the car sideways.
+      const entrySeed = lateralComp + si * (DRIFT_BUILDUP + speedFactor * 0.12);
       lateralVel.copy(rd).multiplyScalar(entrySeed);
       speed = forwardComp;
     } else {
@@ -1225,11 +1263,14 @@ function physicsTick() {
     // Very low grip — slide persists on momentum while spacebar held
     lateralVel.multiplyScalar(1 - DRIFT_GRIP_SLIDE);
 
-    // Floor: while actively drifting at speed, maintain a minimum slide so
-    // counter-steer never fully cancels the visible sideways movement
-    const minLateral = speedFactor * 0.04;
-    if(lateralVel.length() < minLateral && Math.abs(speed) > maxSpeed * 0.3) {
-      lateralVel.setLength(minLateral);
+    // Floor: while actively drifting at speed WITH a steer input, maintain a
+    // minimum slide so counter-steer never fully cancels the visible movement.
+    // No floor when going straight — pressing drift alone should not push sideways.
+    if(si !== 0) {
+      const minLateral = speedFactor * 0.04;
+      if(lateralVel.length() < minLateral && Math.abs(speed) > maxSpeed * 0.3) {
+        lateralVel.setLength(minLateral);
+      }
     }
 
     // Cap relative to speed so slide shrinks naturally as car slows
