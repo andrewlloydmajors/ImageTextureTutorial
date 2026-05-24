@@ -1080,7 +1080,7 @@ function updateDriftSound(isDrifting) {
     peak.gain.value      = 8;   // was 18 — much gentler lift
 
     const g = audioCtx.createGain();
-    g.gain.value = 0.18;
+    g.gain.value = 0.06;
 
     driftSoundNode.connect(hp);
     hp.connect(peak);
@@ -1335,15 +1335,26 @@ function physicsTick() {
 
     speed *= (1 - DRIFT_FRICTION);
 
-    // Stamp skid marks at the rear axle, every SKID_SPAWN_EVERY ticks
+    // Stamp two skid marks at the rear left and right tyre positions
     skidSpawnTick++;
     if(skidSpawnTick >= SKID_SPAWN_EVERY) {
       skidSpawnTick = 0;
-      const rearOffset = fd.clone().multiplyScalar(-1.6);
+      const rearCenter = fd.clone().multiplyScalar(-1.6);
+      // Right vector from physicsQuat for lateral offset
+      const rightVec = new THREE.Vector3(1, 0, 0).applyQuaternion(physicsQuat);
+      const halfTrack = 0.72; // half the distance between the two rear tyres
+      // Left tyre
       spawnSkid(
-        carModel.position.x + rearOffset.x,
+        carModel.position.x + rearCenter.x - rightVec.x * halfTrack,
         carModel.position.y,
-        carModel.position.z + rearOffset.z,
+        carModel.position.z + rearCenter.z - rightVec.z * halfTrack,
+        carYaw
+      );
+      // Right tyre
+      spawnSkid(
+        carModel.position.x + rearCenter.x + rightVec.x * halfTrack,
+        carModel.position.y,
+        carModel.position.z + rearCenter.z + rightVec.z * halfTrack,
         carYaw
       );
     }
